@@ -44,12 +44,15 @@ def completion(
     tokens: tuple[int, int] = (100, 50),
     cost: str | None = "0.0001",
 ) -> httpx2.Response:
+    # Like the real proxy: the body names the alias, a header names the upstream model.
     body = {
-        "model": model,
+        "model": "engleks-rewrite",
         "choices": [{"index": 0, "message": {"role": "assistant", "content": content}}],
         "usage": {"prompt_tokens": tokens[0], "completion_tokens": tokens[1]},
     }
-    headers = {"x-litellm-response-cost": cost} if cost is not None else {}
+    headers = {"x-litellm-model-name": model}
+    if cost is not None:
+        headers["x-litellm-response-cost"] = cost
     return httpx2.Response(200, json=body, headers=headers)
 
 
@@ -158,6 +161,13 @@ async def test_transport_and_envelope_failures(handler, reason):
     with pytest.raises(RewriteFailed) as e:
         await make(handler).rewrite(REQ)
     assert e.value.reason == reason
+
+
+async def test_model_falls_back_to_body_without_upstream_header():
+    response = completion(VALID)
+    del response.headers["x-litellm-model-name"]
+    out = await make(lambda _: response).rewrite(REQ)
+    assert out.usage.model == "engleks-rewrite"
 
 
 async def test_missing_cost_header_gives_none():

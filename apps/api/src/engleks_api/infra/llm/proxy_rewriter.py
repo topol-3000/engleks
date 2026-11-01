@@ -163,12 +163,14 @@ class ProxyRewriter:
         if not completion.choices:
             raise RewriteFailed("malformed_response")
 
+        # The body names the proxy alias; the header names the upstream model we store.
+        model = response.headers.get("x-litellm-model-name") or completion.model
         cost = _parse_cost(response.headers.get("x-litellm-response-cost"))
         if cost is None:
-            log.warning("llm_cost_unknown", model=completion.model, attempt=attempt)
+            log.warning("llm_cost_unknown", model=model, attempt=attempt)
         log.info(
             "llm_call",
-            model=completion.model,
+            model=model,
             prompt_version=PROMPT_VERSION,
             attempt=attempt,
             tokens_in=completion.usage.prompt_tokens,
@@ -178,7 +180,7 @@ class ProxyRewriter:
         )
         return _Attempt(
             content=completion.choices[0].message.content or "",
-            model=completion.model,
+            model=model,
             tokens_in=completion.usage.prompt_tokens,
             tokens_out=completion.usage.completion_tokens,
             cost=cost,
