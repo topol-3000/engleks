@@ -28,7 +28,7 @@ async def run(settings: Settings) -> None:
     ) as client:
         await check_api(client)
         dispatcher = Dispatcher()
-        dispatcher.include_router(start.router)
+        dispatcher.include_router(start.build_router())
         bot = Bot(settings.telegram_token.get_secret_value())
         await dispatcher.start_polling(bot)
 

@@ -104,6 +104,7 @@ Never add an import-linter exception to get green; change the design instead.
 - Pyright is strict for `domain` and `application`, standard elsewhere. No `Any` in their
   signatures. Silence pyright only with `# pyright: ignore[<rule>]` and a comment giving the reason.
 - Async all the way for I/O; no blocking calls in async code.
+- Bot messages are built with `aiogram.utils.formatting` and sent as `**text.as_kwargs()` (text + entities); never a parse mode, never escaping.
 - No DI framework. `Settings()` is built only in `create_app()` and the bot's `main()`;
   everything else gets values or adapters passed in.
 - Secrets are `SecretStr`, read from `/run/secrets` in containers and from `.env` locally.
@@ -134,7 +135,7 @@ Never add an import-linter exception to get green; change the design instead.
   Postgres, `db_session` for a raw session and `sessions` for repositories (a sessionmaker
   whose commits are savepoints; both are rolled back after each test).
   HTTP tests replace the LLM with `app.dependency_overrides[text_rewriter] = lambda: fake`.
-- Bot tests mock the API with `httpx2.MockTransport`, building responses from real `engleks_contracts` DTOs.
+- Bot tests mock the API with `httpx2.MockTransport`, building responses from real `engleks_contracts` DTOs. Handler tests use real aiogram objects bound to a `Bot` on the `RecordingSession` fixture (`apps/bot/tests/conftest.py`), never `AsyncMock(spec=Message)`.
 - No test calls a real LLM or Telegram, except ones marked `@pytest.mark.llm`
   (run with `make test-llm`, never in CI).
 

@@ -1,0 +1,107 @@
+import time
+from collections.abc import Iterable
+
+import structlog
+from aiogram import Bot, F, Router
+from aiogram.types import InlineKeyboardMarkup, LinkPreviewOptions, Message, MessageEntity, User
+from aiogram.utils.chat_action import ChatActionSender
+from pydantic import ValidationError
+
+from engleks_bot.api_client import ApiClient, ApiError
+from engleks_bot.handlers.start import HELP_TEXT
+from engleks_bot.rendering.errors import CANNOT_PROCESS, SEND_TEXT, error_text
+from engleks_bot.rendering.keyboards import rerun_keyboard
+from engleks_bot.rendering.reply import render_reply
+from engleks_contracts import Mode, ProcessTextRequest
+
+log = structlog.stdlib.get_logger()
+
+
+async def process_and_reply(
+    original: Message,
+    mode: Mode,
+    next_modes: Iterable[Mode],
+    *,
+    user_id: int,
+    api: ApiClient,
+    bot: Bot,
+) -> bool:
+    """Send the original's text to the API and reply with the result. True on success."""
+
+    async def reply(
+        text: str,
+        *,
+        entities: list[MessageEntity] | None = None,
+        reply_markup: InlineKeyboardMarkup | None = None,
+    ) -> None:
+        await original.answer(
+            text,
+            entities=entities,
+            parse_mode=None,
+            reply_markup=reply_markup,
+            reply_parameters=original.as_reply_parameters(allow_sending_without_reply=True),
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
+
+    text = original.text or ""
+    try:
+        request = ProcessTextRequest(text=text, mode=mode)
+    except ValidationError:
+        # Not logged: the error message would echo the user's text.
+        await reply(CANNOT_PROCESS)
+        return False
+
+    started = time.monotonic()
+    try:
+        async with ChatActionSender.typing(bot=bot, chat_id=original.chat.id):
+            response = await api.process_text(user_id, request)
+    except ApiError as exc:
+        log.warning("api_call_failed", status_code=exc.status_code, code=exc.code, mode=mode.value)
+        await reply(error_text(exc))
+        return False
+    duration_ms = int((time.monotonic() - started) * 1000)
+
+    parts = render_reply(response)
+    keyboard = rerun_keyboard(next_modes)
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        text_part, entities = part.render()
+        await reply(text_part, entities=entities, reply_markup=keyboard if last else None)
+    log.info(
+        "text_processed",
+        interaction_id=str(response.interaction_id),
+        mode=mode.value,
+        source_language=response.source_language.value,
+        text_len=len(text),
+        changes=len(response.changes),
+        messages=len(parts),
+        duration_ms=duration_ms,
+    )
+    return True
+
+
+async def on_text(message: Message, event_from_user: User, api: ApiClient, bot: Bot) -> None:
+    await process_and_reply(
+        message,
+        Mode.MINIMAL,
+        [Mode.NATURAL, Mode.POLISHED],
+        user_id=event_from_user.id,
+        api=api,
+        bot=bot,
+    )
+
+
+async def on_command(message: Message) -> None:
+    await message.answer(HELP_TEXT)
+
+
+async def on_other(message: Message) -> None:
+    await message.answer(SEND_TEXT)
+
+
+def build_router() -> Router:
+    router = Router()
+    router.message.register(on_text, F.text & ~F.text.startswith("/"))
+    router.message.register(on_command, F.text.startswith("/"))
+    router.message.register(on_other)
+    return router
