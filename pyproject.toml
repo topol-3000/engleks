@@ -1,0 +1,140 @@
+[project]
+name = "engleks"
+version = "0.0.0"
+requires-python = ">=3.14"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*"]
+
+[dependency-groups]
+dev = [
+    "httpx",
+    "import-linter",
+    "pre-commit",
+    "pyright",
+    "pytest",
+    "pytest-asyncio",
+    "respx",
+    "ruff",
+    "testcontainers[postgres]",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["engleks_api", "engleks_bot", "engleks_contracts"]
+
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+strict = ["apps/api/src/engleks_api/domain", "apps/api/src/engleks_api/application"]
+include = ["apps", "packages"]
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["packages/contracts/tests", "apps/api/tests", "apps/bot/tests"]
+addopts = "--import-mode=importlib -m 'not llm'"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["llm: calls a real LLM provider; excluded by default"]
+
+[tool.importlinter]
+root_packages = ["engleks_api", "engleks_bot", "engleks_contracts"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "API layers"
+type = "layers"
+containers = ["engleks_api"]
+layers = ["transport | admin", "application", "domain"]
+
+[[tool.importlinter.contracts]]
+name = "Application and domain never import infra"
+type = "forbidden"
+source_modules = ["engleks_api.application", "engleks_api.domain"]
+forbidden_modules = ["engleks_api.infra"]
+
+[[tool.importlinter.contracts]]
+name = "Infra depends only on domain"
+type = "forbidden"
+source_modules = ["engleks_api.infra"]
+forbidden_modules = [
+    "engleks_api.application",
+    "engleks_api.transport",
+    "engleks_api.admin",
+    "engleks_api.main",
+    "engleks_api.config",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only main connects infra"
+type = "forbidden"
+source_modules = ["engleks_api.transport", "engleks_api.admin"]
+forbidden_modules = ["engleks_api.infra"]
+
+[[tool.importlinter.contracts]]
+name = "Pure core"
+type = "forbidden"
+source_modules = ["engleks_api.domain", "engleks_api.application"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "sqlalchemy",
+    "asyncpg",
+    "httpx",
+    "litellm",
+    "aiogram",
+]
+
+[[tool.importlinter.contracts]]
+name = "Apps are independent"
+type = "independence"
+modules = ["engleks_api", "engleks_bot"]
+
+[[tool.importlinter.contracts]]
+name = "Contracts import neither app"
+type = "forbidden"
+source_modules = ["engleks_contracts"]
+forbidden_modules = ["engleks_api", "engleks_bot"]
+
+[[tool.importlinter.contracts]]
+name = "Contracts depend only on pydantic"
+type = "forbidden"
+source_modules = ["engleks_contracts"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "sqlalchemy",
+    "asyncpg",
+    "alembic",
+    "httpx",
+    "litellm",
+    "aiogram",
+    "structlog",
+    "pydantic_settings",
+]
+
+[[tool.importlinter.contracts]]
+name = "Contracts only at the edge"
+type = "forbidden"
+source_modules = [
+    "engleks_api.application",
+    "engleks_api.domain",
+    "engleks_api.infra",
+    "engleks_api.admin",
+    "engleks_api.main",
+    "engleks_api.config",
+]
+forbidden_modules = ["engleks_contracts"]
+# main reaches contracts through transport; only direct imports are off-limits.
+allow_indirect_imports = true
