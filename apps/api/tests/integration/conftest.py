@@ -10,7 +10,12 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from pydantic import SecretStr
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 
@@ -124,3 +129,14 @@ def rollback_session() -> Callable[[AsyncEngine], AbstractAsyncContextManager[As
 async def db_session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     async with _rollback_session(engine) as session:
         yield session
+
+
+@pytest.fixture
+async def sessions(engine: AsyncEngine) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """A sessionmaker for repositories whose commits are savepoints, rolled back after the test."""
+    async with engine.connect() as conn:
+        transaction = await conn.begin()
+        yield async_sessionmaker(
+            bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
+        )
+        await transaction.rollback()

@@ -92,6 +92,7 @@ Never add an import-linter exception to get green; change the design instead.
 | an error the client must understand | `ErrorCode` in `packages/contracts`, mapped in `transport/errors.py` |
 | a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret |
 | a DB table | model on `Base` in `infra/db/` + `make revision m="..."` |
+| a repository | port in `domain/ports.py`, adapter in `infra/db/repositories.py` that takes the `async_sessionmaker` and opens one session and transaction per method (see `SqlInteractionRepository`); built in `create_app()`, never in `transport` |
 | a prompt | `infra/llm/prompts/<name>.v<N>.j2`; a changed prompt is a new version, never an edit |
 | a bot command or button | `handlers/<feature>.py` router, included in the bot's `main.py`; layout in `rendering/` |
 
@@ -126,7 +127,8 @@ Never add an import-linter exception to get green; change the design instead.
   satisfy the port's Protocol (see `test_check_readiness.py`). No Docker, no network.
 - Integration tests (`apps/api/tests/integration/`): fixtures in `conftest.py`.
   `client` for HTTP without a DB, `client_for(create_app(pg_settings))` for HTTP with
-  Postgres, `db_session` for repositories (rolled back after each test).
+  Postgres, `db_session` for a raw session and `sessions` for repositories (a sessionmaker
+  whose commits are savepoints; both are rolled back after each test).
 - Bot tests mock the API with `httpx2.MockTransport`, building responses from real `engleks_contracts` DTOs.
 - No test calls a real LLM or Telegram, except ones marked `@pytest.mark.llm`
   (run with `make test-llm`, never in CI).
