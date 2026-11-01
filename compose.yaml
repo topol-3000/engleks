@@ -7,10 +7,17 @@ x-api-env: &api-env
   API_DB_USER: ${API_DB_USER:-engleks}
   API_LOG_FORMAT: json
   API_LOG_LEVEL: ${API_LOG_LEVEL:-INFO}
+  API_LLM_BASE_URL: http://litellm:4000/v1
+  API_LLM_MODEL: engleks-rewrite
 
+# migrate builds the full Settings in env.py, so it gets the same secrets as api.
 x-api-secrets: &api-secrets
   - source: db_password
     target: api_db_password
+  - source: service_token
+    target: api_service_token
+  - source: api_llm_key
+    target: api_llm_api_key
 
 services:
   postgres:
@@ -20,9 +27,14 @@ services:
       POSTGRES_USER: ${API_DB_USER:-engleks}
       POSTGRES_DB: ${API_DB_NAME:-engleks}
       POSTGRES_PASSWORD_FILE: /run/secrets/api_db_password
-    secrets: *api-secrets
+    secrets:
+      - source: db_password
+        target: api_db_password
+      - litellm_db_password
     volumes:
       - pgdata:/var/lib/postgresql
+      # Runs only on an empty data directory: creates the proxy's role and database.
+      - ./deploy/postgres/init-litellm.sh:/docker-entrypoint-initdb.d/10-litellm.sh:ro
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -67,6 +79,43 @@ services:
       retries: 6
     restart: unless-stopped
 
+  litellm:
+    # Our thin image over the digest-pinned upstream one: see deploy/litellm/Dockerfile.
+    build:
+      context: deploy/litellm
+    image: engleks-litellm:local
+    entrypoint: ["/bin/sh", "/deploy/entrypoint.sh"]
+    environment:
+      LLM_UPSTREAM_MODEL: ${LLM_UPSTREAM_MODEL:?set LLM_UPSTREAM_MODEL}
+      LLM_UPSTREAM_API_BASE: ${LLM_UPSTREAM_API_BASE:?set LLM_UPSTREAM_API_BASE}
+      LITELLM_LOG: INFO # the image defaults to DEBUG, which logs request bodies
+    volumes:
+      - ./deploy/litellm:/deploy:ro
+    secrets:
+      - litellm_master_key
+      - litellm_db_password
+      - litellm_ui_username
+      - litellm_ui_password
+      - openai_api_key
+    networks: [default, llm]
+    # Admin UI at /ui: localhost only (prod: SSH tunnel).
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 90s # runs its Prisma migrations on startup
+    restart: unless-stopped
+
   bot:
     build:
       context: .
@@ -91,8 +140,9 @@ services:
     profiles: [dev]
     volumes:
       - ollama:/root/.ollama
-    ports:
-      - "127.0.0.1:11434:11434"
+    # Only litellm shares this network, so nothing else can reach ollama. Not internal:
+    # ollama pulls models through it. Pull with `docker compose exec ollama ollama pull ...`.
+    networks: [llm]
 
 secrets:
   db_password:
@@ -101,6 +151,22 @@ secrets:
     environment: BOT_SERVICE_TOKEN
   telegram_token:
     environment: BOT_TELEGRAM_TOKEN
+  api_llm_key:
+    environment: API_LLM_API_KEY
+  litellm_master_key:
+    environment: LITELLM_MASTER_KEY
+  litellm_db_password:
+    environment: LITELLM_DB_PASSWORD
+  litellm_ui_username:
+    environment: LITELLM_UI_USERNAME
+  litellm_ui_password:
+    environment: LITELLM_UI_PASSWORD
+  openai_api_key:
+    environment: OPENAI_API_KEY
+
+networks:
+  default: {}
+  llm: {}
 
 volumes:
   pgdata:
