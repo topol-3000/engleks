@@ -30,6 +30,9 @@ extend-exclude = ["docs"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["engleks_api", "engleks_bot", "engleks_contracts"]
+
 [tool.pyright]
 pythonVersion = "3.14"
 typeCheckingMode = "standard"
@@ -42,4 +45,5 @@ venv = ".venv"
 testpaths = ["packages/contracts/tests", "apps/api/tests", "apps/bot/tests"]
 addopts = "--import-mode=importlib -m 'not llm'"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = ["llm: calls a real LLM provider; excluded by default"]
