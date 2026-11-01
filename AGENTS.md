@@ -95,6 +95,7 @@ Never add an import-linter exception to get green; change the design instead.
 | a repository | port in `domain/ports.py`, adapter in `infra/db/repositories.py` that takes the `async_sessionmaker` and opens one session and transaction per method (see `SqlInteractionRepository`); built in `create_app()`, never in `transport` |
 | an LLM-backed task | task-level port in `domain/ports.py` (e.g. `TextRewriter`), adapter in `infra/llm/` that calls only the LiteLLM proxy over `httpx2` and validates the output into an infra Pydantic model (see `ProxyRewriter`) |
 | a prompt | `infra/llm/prompts/<name>.v<N>.j2`; a changed prompt is a new version, never an edit |
+| an endpoint that needs the caller | `auth: Annotated[AuthContext, Depends(auth_context)]` from `transport/auth.py`; use cases receive `AuthContext`, never headers |
 | a bot command or button | `handlers/<feature>.py` router, included in the bot's `main.py`; layout in `rendering/` |
 
 ## Code rules
@@ -132,6 +133,7 @@ Never add an import-linter exception to get green; change the design instead.
   `client` for HTTP without a DB, `client_for(create_app(pg_settings))` for HTTP with
   Postgres, `db_session` for a raw session and `sessions` for repositories (a sessionmaker
   whose commits are savepoints; both are rolled back after each test).
+  HTTP tests replace the LLM with `app.dependency_overrides[text_rewriter] = lambda: fake`.
 - Bot tests mock the API with `httpx2.MockTransport`, building responses from real `engleks_contracts` DTOs.
 - No test calls a real LLM or Telegram, except ones marked `@pytest.mark.llm`
   (run with `make test-llm`, never in CI).

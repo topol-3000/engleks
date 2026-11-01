@@ -1,8 +1,13 @@
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from engleks_api.domain.text_processing import RewriteFailed
+from engleks_api.transport.auth import Unauthorized
 from engleks_contracts import ErrorCode, ErrorResponse
+
+log = structlog.stdlib.get_logger()
 
 
 def _error(status_code: int, code: ErrorCode, message: str) -> JSONResponse:
@@ -14,6 +19,15 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
         return _error(422, ErrorCode.VALIDATION_ERROR, "Invalid request")
+
+    @app.exception_handler(Unauthorized)
+    async def unauthorized(request: Request, exc: Unauthorized) -> JSONResponse:
+        return _error(401, ErrorCode.UNAUTHORIZED, "Unauthorized")
+
+    @app.exception_handler(RewriteFailed)
+    async def rewrite_failed(request: Request, exc: RewriteFailed) -> JSONResponse:
+        log.warning("rewrite_failed", reason=exc.reason)
+        return _error(502, ErrorCode.LLM_UNAVAILABLE, "LLM unavailable")
 
     @app.exception_handler(Exception)
     async def unhandled_error(request: Request, exc: Exception) -> JSONResponse:

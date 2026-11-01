@@ -27,6 +27,8 @@ POSTGRES_IMAGE = (
     "postgres:18.6-trixie@sha256:3a4264520e121176619f54ff867d12774bc81e95e7b84db58d63bccdb6144b81"
 )
 
+SERVICE_TOKEN = "test-service-token"
+
 ALEMBIC_INI = Path(__file__).parents[2] / "alembic.ini"
 
 ClientFactory = Callable[[FastAPI], AbstractAsyncContextManager[httpx2.AsyncClient]]
@@ -39,7 +41,8 @@ async def _client(app: FastAPI) -> AsyncGenerator[httpx2.AsyncClient]:
         async with httpx2.AsyncClient(transport=transport, base_url="http://test") as c:
             yield c
     finally:
-        # ASGITransport does not run the lifespan, so dispose the engine here.
+        # ASGITransport does not run the lifespan, so close what it would close here.
+        await app.state.rewriter.aclose()
         await app.state.engine.dispose()
 
 
@@ -50,7 +53,14 @@ def client_for() -> ClientFactory:
 
 @pytest.fixture
 def app() -> FastAPI:
-    return create_app(Settings(db_password=SecretStr("unused"), _env_file=None))
+    return create_app(
+        Settings(
+            db_password=SecretStr("unused"),
+            service_token=SecretStr(SERVICE_TOKEN),
+            llm_api_key=SecretStr("unused"),
+            _env_file=None,
+        )
+    )
 
 
 @pytest.fixture
@@ -78,6 +88,8 @@ def pg_settings(postgres: PostgresContainer) -> Settings:
         db_user=postgres.username,
         db_password=SecretStr(postgres.password),
         db_name=postgres.dbname,
+        service_token=SecretStr(SERVICE_TOKEN),
+        llm_api_key=SecretStr("unused"),
         _env_file=None,
     )
 
