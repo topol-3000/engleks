@@ -11,7 +11,8 @@ cp .env.example .env    # set BOT_TELEGRAM_TOKEN to run the bot; change the LITE
 make up                 # the whole stack, with the LiteLLM proxy and Ollama (dev profile)
 docker compose exec ollama ollama pull gemma3:4b
 make llm-key            # paste the printed API_LLM_API_KEY line into .env
-docker compose up -d api   # restart the API with the key
+# Secret values are not part of Compose's change detection, so force the restart:
+docker compose up -d --force-recreate --no-deps api
 ```
 
 The API is at http://localhost:8000/docs and the LiteLLM Admin UI at
