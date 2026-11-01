@@ -3,8 +3,9 @@ from collections.abc import Iterable
 
 import structlog
 from aiogram import Bot, F, Router
-from aiogram.types import InlineKeyboardMarkup, LinkPreviewOptions, Message, MessageEntity, User
+from aiogram.types import InlineKeyboardMarkup, LinkPreviewOptions, Message, User
 from aiogram.utils.chat_action import ChatActionSender
+from aiogram.utils.formatting import Text
 from pydantic import ValidationError
 
 from engleks_bot.api_client import ApiClient, ApiError
@@ -29,15 +30,12 @@ async def process_and_reply(
     """Send the original's text to the API and reply with the result. True on success."""
 
     async def reply(
-        text: str,
+        content: Text,
         *,
-        entities: list[MessageEntity] | None = None,
         reply_markup: InlineKeyboardMarkup | None = None,
     ) -> None:
         await original.answer(
-            text,
-            entities=entities,
-            parse_mode=None,
+            **content.as_kwargs(),
             reply_markup=reply_markup,
             reply_parameters=original.as_reply_parameters(allow_sending_without_reply=True),
             link_preview_options=LinkPreviewOptions(is_disabled=True),
@@ -48,7 +46,7 @@ async def process_and_reply(
         request = ProcessTextRequest(text=text, mode=mode)
     except ValidationError:
         # Not logged: the error message would echo the user's text.
-        await reply(CANNOT_PROCESS)
+        await reply(Text(CANNOT_PROCESS))
         return False
 
     started = time.monotonic()
@@ -57,7 +55,7 @@ async def process_and_reply(
             response = await api.process_text(user_id, request)
     except ApiError as exc:
         log.warning("api_call_failed", status_code=exc.status_code, code=exc.code, mode=mode.value)
-        await reply(error_text(exc))
+        await reply(Text(error_text(exc)))
         return False
     duration_ms = int((time.monotonic() - started) * 1000)
 
@@ -65,8 +63,7 @@ async def process_and_reply(
     keyboard = rerun_keyboard(next_modes)
     for i, part in enumerate(parts):
         last = i == len(parts) - 1
-        text_part, entities = part.render()
-        await reply(text_part, entities=entities, reply_markup=keyboard if last else None)
+        await reply(part, reply_markup=keyboard if last else None)
     log.info(
         "text_processed",
         interaction_id=str(response.interaction_id),
