@@ -1,6 +1,6 @@
 # pyright: reportCallIssue=false
 # Pyright cannot see pydantic-settings init options (_env_file, _secrets_dir).
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 
@@ -28,7 +28,7 @@ ClientFactory = Callable[[FastAPI], AbstractAsyncContextManager[httpx.AsyncClien
 
 
 @asynccontextmanager
-async def _client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+async def _client(app: FastAPI) -> AsyncGenerator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
