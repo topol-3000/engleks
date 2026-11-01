@@ -6,6 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import engleks_api.infra.db.models  # noqa: F401  (registers tables on Base.metadata)
 from engleks_api.config import Settings
 from engleks_api.infra.db.base import Base
 from engleks_api.logging_setup import configure_logging

@@ -1,4 +1,4 @@
-.PHONY: install lint fmt test test-llm migrate revision dev-db up down scan
+.PHONY: install lint fmt test test-llm migrate revision dev-db up down scan litellm-image llm-key
 install:
 	uv sync --all-packages
 	uv run pre-commit install
@@ -28,5 +28,14 @@ down:
 # Keep the version in sync with TRIVY_VERSION in .github/workflows/ci.yml.
 TRIVY_IMAGE := aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
 TRIVY := docker run --rm -v "$(CURDIR)":/src:ro -v trivy-cache:/root/.cache/ -w /src $(TRIVY_IMAGE)
-scan:
+# Image scans read the local image through the Docker socket.
+TRIVY_DOCKER := docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache/ $(TRIVY_IMAGE)
+# trivy fs never looks inside images, and the proxy is the largest third-party image we run.
+scan: litellm-image
 	$(TRIVY) fs --no-progress --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --skip-dirs .venv .
+	$(TRIVY_DOCKER) image --no-progress --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 engleks-litellm:local
+litellm-image:
+	docker build -t engleks-litellm:local deploy/litellm
+# Prints the API's virtual key for .env (API_LLM_API_KEY). Needs the litellm service running.
+llm-key:
+	docker compose exec litellm python /deploy/generate_key.py

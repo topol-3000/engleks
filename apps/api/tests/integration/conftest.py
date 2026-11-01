@@ -10,7 +10,12 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from pydantic import SecretStr
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 
@@ -21,6 +26,8 @@ from engleks_api.main import create_app
 POSTGRES_IMAGE = (
     "postgres:18.6-trixie@sha256:3a4264520e121176619f54ff867d12774bc81e95e7b84db58d63bccdb6144b81"
 )
+
+SERVICE_TOKEN = "test-service-token"
 
 ALEMBIC_INI = Path(__file__).parents[2] / "alembic.ini"
 
@@ -34,7 +41,8 @@ async def _client(app: FastAPI) -> AsyncGenerator[httpx2.AsyncClient]:
         async with httpx2.AsyncClient(transport=transport, base_url="http://test") as c:
             yield c
     finally:
-        # ASGITransport does not run the lifespan, so dispose the engine here.
+        # ASGITransport does not run the lifespan, so close what it would close here.
+        await app.state.rewriter.aclose()
         await app.state.engine.dispose()
 
 
@@ -45,7 +53,14 @@ def client_for() -> ClientFactory:
 
 @pytest.fixture
 def app() -> FastAPI:
-    return create_app(Settings(db_password=SecretStr("unused"), _env_file=None))
+    return create_app(
+        Settings(
+            db_password=SecretStr("unused"),
+            service_token=SecretStr(SERVICE_TOKEN),
+            llm_api_key=SecretStr("unused"),
+            _env_file=None,
+        )
+    )
 
 
 @pytest.fixture
@@ -73,6 +88,8 @@ def pg_settings(postgres: PostgresContainer) -> Settings:
         db_user=postgres.username,
         db_password=SecretStr(postgres.password),
         db_name=postgres.dbname,
+        service_token=SecretStr(SERVICE_TOKEN),
+        llm_api_key=SecretStr("unused"),
         _env_file=None,
     )
 
@@ -124,3 +141,14 @@ def rollback_session() -> Callable[[AsyncEngine], AbstractAsyncContextManager[As
 async def db_session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     async with _rollback_session(engine) as session:
         yield session
+
+
+@pytest.fixture
+async def sessions(engine: AsyncEngine) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """A sessionmaker for repositories whose commits are savepoints, rolled back after the test."""
+    async with engine.connect() as conn:
+        transaction = await conn.begin()
+        yield async_sessionmaker(
+            bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
+        )
+        await transaction.rollback()

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     db_name: str = "engleks"
     db_user: str = "engleks"
     db_password: SecretStr
+    # Shared with the bot. Never empty, or an empty X-Bot-Token would authenticate.
+    service_token: SecretStr = Field(min_length=1)
+    # The LiteLLM proxy's OpenAI-compatible endpoint and the API's virtual key.
+    llm_base_url: str = "http://localhost:4000/v1"
+    llm_model: str = "engleks-rewrite"
+    llm_api_key: SecretStr
+    llm_timeout_s: float = 60
     log_format: Literal["json", "console"] = "json"
     log_level: str = "INFO"
 

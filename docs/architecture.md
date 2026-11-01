@@ -25,8 +25,9 @@ flowchart LR
   APP --> DIFF[Diff Engine]
   APP --> REPO[Repositories]
   REPO --> PG[(PostgreSQL)]
-  LLM --> P1[Cloud LLM]
-  LLM -.-> P2["Ollama (dev)"]
+  LLM --> PROXY["LiteLLM proxy"]
+  PROXY --> P1[Cloud LLM]
+  PROXY -.-> P2["Ollama (dev)"]
 ```
 
 **Bot**: receives messages, calls the API and renders the reply. Long replies are split into 4096-character messages, with inline buttons. The bot has no database and no business logic.
@@ -40,7 +41,8 @@ flowchart LR
 
 **LLM Gateway**:
 
-- `LLMProvider` port with adapters: LiteLLM or a cloud provider, and Ollama for development.
+- Task-level ports (`TextRewriter`), not a generic `LLMProvider`, so prompts and schemas stay in infra.
+- One adapter per port, calling only the LiteLLM proxy (a Compose service). Provider keys, model choice and routing live in the proxy; it serves a cloud LLM in prod and Ollama in dev, and Ollama is reachable only from the proxy.
 - Versioned prompt templates.
 - Structured output validated with Pydantic, with one retry on invalid JSON.
 
@@ -63,10 +65,10 @@ sequenceDiagram
   A->>D: rate limit + daily budget check
   A->>A: detect language, build prompt
   A->>L: generate(schema)
-  L-->>A: JSON {variants, changes[], vocabulary_candidates}
+  L-->>A: JSON {source_language, output_text, changes[]}
   A->>A: compute diff
   A->>D: save interaction, corrections; usage_daily += tokens
-  A-->>B: ProcessResult DTO
+  A-->>B: ProcessTextResponse {interaction_id, source_language, mode, output_text, changes[]}
 ```
 
 Errors:
@@ -87,7 +89,7 @@ Errors:
 
 - Rate limit: N requests per minute per user. Counters in Postgres for the MVP, Redis later.
 - Daily token budget: checked before the LLM call and updated after it.
-- Defaults are set in config. `user.limits_override` changes them for one user.
+- Defaults are set in config. `app_user.limits_override` changes them for one user.
 
 ## 6. Admin dashboard
 
@@ -100,13 +102,15 @@ Errors:
 
 | Table | Purpose |
 | --- | --- |
-| `user` | status (active/disabled), `limits_override`, settings (explanation language, default mode) |
-| `identity` | provider (telegram, later web), `external_id` → user |
+| `app_user` | status (active/disabled), `limits_override`, settings (explanation language, default mode). Not `user`: reserved in Postgres |
+| `identity` | provider (telegram, later web), `external_id` → `app_user` |
 | `invite_code` | code, `created_by`, `max_uses`, `used_count`, `expires_at`, revoked |
 | `context_profile` | audience, tone, channel, glossary |
 | `interaction` | input, mode, language, full JSON response, model, prompt version, tokens, cost |
-| `correction` | original, replacement, category, explanation → interaction |
+| `correction` | original, replacement, category, explanation, span → interaction |
 | `usage_daily` | `user_id`, date, requests, `tokens_in`, `tokens_out`, cost |
+
+Correction categories: `grammar`, `articles`, `spelling`, `punctuation`, `word_choice`, `word_order`, `style`, and `other` for an edit the model did not explain.
 
 ## 8. API (draft)
 
@@ -119,4 +123,4 @@ Errors:
 
 ## 9. Deployment
 
-Docker Compose with three services: `api`, `bot` (long polling for the MVP) and `postgres`. Configuration comes from env, with secrets kept separately. Token usage and cost are logged.
+Docker Compose with the services `api`, `bot` (long polling for the MVP), `postgres` and `litellm` (the LLM proxy, with its own database on the same Postgres server), plus `ollama` in dev. Configuration comes from env, with secrets kept separately. Token usage and cost are logged.
