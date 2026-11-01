@@ -1,6 +1,7 @@
 from aiogram import Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+from aiogram.utils.formatting import Text
 
 HELP_TEXT = (
     "Hi! I'm Engleks, your English writing trainer.\n\n"
@@ -12,7 +13,7 @@ HELP_TEXT = (
 
 
 async def start(message: Message) -> None:
-    await message.answer(HELP_TEXT)
+    await message.answer(**Text(HELP_TEXT).as_kwargs())
 
 
 def build_router() -> Router:

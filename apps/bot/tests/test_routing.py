@@ -109,13 +109,13 @@ async def test_photo_gets_send_text(feed, api_calls, sent):
     assert api_calls == []
 
 
-def callback_update(data: str) -> dict:
+def callback_update(data: str, *, chat_type: str = "private") -> dict:
     keyboard = rerun_keyboard([Mode.NATURAL])
     original = message_dict("I has went.", message_id=10)
     reply = {
         "message_id": 11,
         "date": now(),
-        "chat": {"id": 1, "type": "private"},
+        "chat": {"id": 1, "type": chat_type},
         "from": BOT_USER,
         "text": "I went. …",
         "reply_to_message": original,
@@ -137,6 +137,13 @@ async def test_rerun_callback_routed(feed, api_calls, sent):
     await feed(callback_update(RerunCallback(mode=Mode.NATURAL).pack()))
     assert [c["mode"] for c in api_calls] == ["natural"]
     assert len(sent()) == 1
+
+
+@pytest.mark.parametrize("chat_type", ["group", "supergroup"])
+async def test_group_callback_ignored(chat_type, feed, api_calls, session):
+    await feed(callback_update(RerunCallback(mode=Mode.NATURAL).pack(), chat_type=chat_type))
+    assert api_calls == []
+    assert session.requests == []
 
 
 async def test_foreign_callback_ignored(feed, api_calls, session):

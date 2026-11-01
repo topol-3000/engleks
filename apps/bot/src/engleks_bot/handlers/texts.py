@@ -61,9 +61,6 @@ async def process_and_reply(
 
     parts = render_reply(response)
     keyboard = rerun_keyboard(next_modes)
-    for i, part in enumerate(parts):
-        last = i == len(parts) - 1
-        await reply(part, reply_markup=keyboard if last else None)
     log.info(
         "text_processed",
         interaction_id=str(response.interaction_id),
@@ -74,6 +71,9 @@ async def process_and_reply(
         messages=len(parts),
         duration_ms=duration_ms,
     )
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        await reply(part, reply_markup=keyboard if last else None)
     return True
 
 
@@ -89,11 +89,11 @@ async def on_text(message: Message, event_from_user: User, api: ApiClient, bot: 
 
 
 async def on_command(message: Message) -> None:
-    await message.answer(HELP_TEXT)
+    await message.answer(**Text(HELP_TEXT).as_kwargs())
 
 
 async def on_other(message: Message) -> None:
-    await message.answer(SEND_TEXT)
+    await message.answer(**Text(SEND_TEXT).as_kwargs())
 
 
 def build_router() -> Router:

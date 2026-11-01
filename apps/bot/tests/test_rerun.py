@@ -147,9 +147,14 @@ async def test_duplicate_tap_makes_one_call(make_api, make_callback, bot, sessio
         rerun(make_callback(reply, Mode.NATURAL), data, api, bot, in_flight)
     )
     await entered.wait()
-    await rerun(make_callback(reply, Mode.NATURAL), data, api, bot, in_flight)
+    # wait_for: a regressed guard would block on release.wait() forever instead of failing.
+    await asyncio.wait_for(
+        rerun(make_callback(reply, Mode.NATURAL), data, api, bot, in_flight), timeout=1
+    )
     answers = of_type(session, AnswerCallbackQuery)
     assert [a.text for a in answers][-1] == ALREADY_WORKING
+    assert len(calls) == 1
+    assert len(of_type(session, EditMessageReplyMarkup)) == 1
     release.set()
     await first
     assert len(calls) == 1
@@ -236,3 +241,63 @@ async def test_inaccessible_message(make_api, make_callback, bot, session):
     assert isinstance(answer, AnswerCallbackQuery)
     assert (answer.text, answer.show_alert) == (TOO_OLD, True)
     assert calls == []
+
+
+async def test_rerun_continues_when_callback_answer_fails(
+    make_api, make_callback, bot, session, sent, reply
+):
+    session.fail[AnswerCallbackQuery] = TelegramBadRequest(
+        method=AnswerCallbackQuery(callback_query_id="cb"),
+        message="Bad Request: query is too old and response timeout expired",
+    )
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return ok_json(Mode.NATURAL)
+
+    in_flight = set()
+    await rerun(
+        make_callback(reply, Mode.NATURAL),
+        RerunCallback(mode=Mode.NATURAL),
+        make_api(handler),
+        bot,
+        in_flight,
+    )
+    assert [s["mode"] for s in seen] == ["natural"]
+    [msg] = sent()
+    assert msg.reply_parameters.message_id == 10
+    assert keyboard_modes(msg.reply_markup) == [Mode.POLISHED]
+    assert in_flight == set()
+
+
+async def test_stale_tap_on_removed_mode_is_only_acknowledged(
+    make_api, make_callback, make_message, original, bot, session
+):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return ok_json(Mode.NATURAL)
+
+    stale = make_message(
+        "I went. …",
+        message_id=11,
+        from_bot=True,
+        reply_to=original,
+        reply_markup=rerun_keyboard([Mode.POLISHED]),
+    )
+    in_flight = set()
+    await rerun(
+        make_callback(stale, Mode.NATURAL),
+        RerunCallback(mode=Mode.NATURAL),
+        make_api(handler),
+        bot,
+        in_flight,
+    )
+    [answer] = session.requests
+    assert isinstance(answer, AnswerCallbackQuery)
+    assert answer.text is None
+    assert of_type(session, EditMessageReplyMarkup) == []
+    assert calls == []
+    assert in_flight == set()

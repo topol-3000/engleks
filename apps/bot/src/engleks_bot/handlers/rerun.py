@@ -1,5 +1,8 @@
+from contextlib import suppress
+
 import structlog
 from aiogram import Bot, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 
 from engleks_bot.api_client import ApiClient
@@ -35,12 +38,18 @@ async def rerun(
         log.info("rerun_duplicate_ignored", mode=mode.value)
         await callback.answer(ALREADY_WORKING)
         return
+    if mode not in keyboard_modes(reply.reply_markup):
+        # Stale tap: the keyboard is already gone or changed. Just stop the spinner.
+        await callback.answer()
+        return
     # Taken before any await: a concurrent tap must see it while we talk to Telegram.
     in_flight.add(key)
     try:
         remaining = [m for m in keyboard_modes(reply.reply_markup) if m != mode]
         await reply.edit_reply_markup(reply_markup=None)
-        await callback.answer(rewriting(mode))
+        # Only a toast; Telegram rejects late answers (e.g. taps replayed after a restart).
+        with suppress(TelegramBadRequest):
+            await callback.answer(rewriting(mode))
         log.info("rerun_requested", mode=mode.value)
         ok = await process_and_reply(
             original, mode, remaining, user_id=callback.from_user.id, api=api, bot=bot

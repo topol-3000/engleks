@@ -4,6 +4,8 @@ from uuid import UUID
 import httpx2
 import pytest
 import structlog
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import SendMessage
 from aiogram.types import User
 
 from engleks_bot.handlers.start import HELP_TEXT
@@ -133,6 +135,17 @@ async def test_logs_never_contain_text(make_message, make_api, bot):
     assert entry["messages"] == 1
     assert isinstance(entry["duration_ms"], int) and entry["duration_ms"] >= 0
     assert "secret" not in repr(logs)
+
+
+async def test_text_processed_logged_even_when_send_fails(make_message, make_api, bot, session):
+    session.fail[SendMessage] = TelegramBadRequest(
+        method=SendMessage(chat_id=1, text="x"), message="Bad Request"
+    )
+    api = make_api(reply_with(ok()))
+    with structlog.testing.capture_logs() as logs, pytest.raises(TelegramBadRequest):
+        await on_text(make_message("My text"), USER, api, bot)
+    [entry] = [e for e in logs if e["event"] == "text_processed"]
+    assert entry["interaction_id"] == str(UUID(int=1))
 
 
 async def test_command_gets_help(make_message, sent):
