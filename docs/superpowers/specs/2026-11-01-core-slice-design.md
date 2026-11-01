@@ -6,14 +6,14 @@ Status: draft for review · Date: 2026-11-01 · Related: [MVP Architecture](../.
 
 Build `ProcessText` end to end: `POST /v1/texts/process` takes a user's text, improves it (English) or translates it (UA/RU → EN) in one LLM call, explains every change, and stores the result. This is sub-project 2 of 5 (Foundation, **Core slice**, Bot, Access, Admin dashboard).
 
-Done means: with Ollama running, a `curl` to the endpoint returns an improved text with explained, positioned changes, and the interaction and its corrections are in Postgres.
+Done means: with the LiteLLM proxy and Ollama running, a `curl` to the endpoint returns an improved text with explained, positioned changes, and the interaction and its corrections are in Postgres.
 
 ## 2. Scope
 
 In scope:
 
 - Domain model, diff engine and reconciliation.
-- LLM gateway: one LiteLLM adapter (Ollama in dev, OpenAI in prod), prompt `process_text.v1`.
+- LLM gateway: a LiteLLM Proxy Compose service (Ollama upstream in dev, OpenAI in prod, Admin UI on), and one API adapter that calls only the proxy; prompt `process_text.v1`.
 - Tables `app_user`, `identity`, `interaction`, `correction` (migration `0002`).
 - Minimal auth: shared bot token plus Telegram user id, auto-creating the user.
 - `POST /v1/texts/process` and its contract DTOs.
@@ -35,8 +35,9 @@ Out of scope, with the reason:
 
 | Area | Decision | Why |
 | --- | --- | --- |
-| LLM library | LiteLLM, pinned `==`, hash-locked in `uv.lock` | Dev and prod differ only by the model string in env. Pinned because LiteLLM had PyPI supply-chain compromises in March 2026 (1.82.7, 1.82.8) and October 2026 (1.107.0) |
-| LLM port | Task-level `TextRewriter`, not a generic `LLMProvider` | Prompts and schemas stay in `infra`; a generic port would push them through `application`, which the import contracts forbid. Later features get their own task-level ports sharing the LiteLLM client |
+| LLM gateway | LiteLLM Proxy as its own Compose service; the API calls only the proxy, never a provider or Ollama | Provider keys, model choice and routing live in the proxy, and its Admin UI gives model, key and spend management for free. The proxy image is pinned by digest because LiteLLM was compromised in March 2026 (1.82.7, 1.82.8) and October 2026 (1.107.0, PyPI and official images) |
+| Ollama | Reachable only from the proxy, on a separate network | Enforces "no direct Ollama" by network design, not convention |
+| LLM port | Task-level `TextRewriter`, not a generic `LLMProvider` | Prompts and schemas stay in `infra`; a generic port would push them through `application`, which the import contracts forbid. Later features get their own task-level ports sharing the proxy client |
 | Language detection | By the model, in the same call (`source_language`) | Architecture §1. An alphabet heuristic breaks on mixed text |
 | Explanation language | Request field, default `en` | No settings endpoint yet; when it arrives, the stored setting becomes the default |
 | Output | One text for the chosen mode, plus changes | §2 |
@@ -52,7 +53,7 @@ Out of scope, with the reason:
 | `Mode` | `minimal`, `natural`, `polished` | Architecture §1 |
 | `Language` | `en`, `uk`, `ru` | One enum for detected and explanation language: users write in these and want explanations in these |
 | `Category` | `grammar`, `articles`, `spelling`, `punctuation`, `word_choice`, `word_order`, `style`, `other` | Coarse on purpose: a small, distinct label set is classified more consistently, especially by small local models. `articles` is separate because UA/RU have none, so article errors are among the most frequent for these learners. `word_order` because UA/RU order is freer than English. `other` is assigned by reconciliation, never asked of the model |
-| `Usage` | `model`, `prompt_version`, `tokens_in`, `tokens_out`, `cost: Decimal \| None` | Logged and stored per call. `Decimal` because sub-cent costs are summed; floats drift |
+| `Usage` | `model`, `prompt_version`, `tokens_in`, `tokens_out`, `cost: Decimal \| None` | Logged and stored per call; per-user cost is what Access budgets need, and the proxy only sees one caller. `Decimal` because sub-cent costs are summed; floats drift |
 | `ModelChange` | `original`, `replacement`, `category`, `explanation` | What the model claims. Untrusted, never returned directly |
 | `RewriteRequest` | `text`, `mode`, `explanation_language` | Crosses the port |
 | `RewriteOutcome` | `source_language`, `output_text`, `changes: list[ModelChange]`, `usage`, `llm_response: Mapping[str, object]` | Crosses the port. `llm_response` is the validated model output dumped to JSON, for storage; never raw text |
@@ -97,39 +98,68 @@ class ProcessTextResponse(BaseModel):
 | `Mode`, `Language`, `Category` duplicated in contracts and domain | AGENTS.md rule 5. A unit test asserts equal values |
 | New `ErrorCode`s: `unauthorized` (401), `llm_unavailable` (502) | The two failures this slice can produce. `forbidden` and `rate_limited` come with Access; adding values is safe while the bot is the only client |
 
-## 6. LLM gateway (`infra/llm/`)
+## 6. LLM gateway
 
-### Config (`API_` prefix)
+```
+network default:  api ──HTTP──▶ litellm:4000 ──▶ postgres (database `litellm`)
+network llm:                    litellm ──▶ ollama:11434     (dev profile)
+                                litellm ──▶ api.openai.com   (prod)
+```
 
-| Setting | Why |
-| --- | --- |
-| `LLM_MODEL`, a LiteLLM model string: `ollama_chat/qwen3:8b` (dev), `openai/<model>` (prod) | LiteLLM routes on the prefix; dev and prod differ only by env |
-| `LLM_API_BASE: str \| None` | Ollama's URL in dev; OpenAI needs none |
-| `LLM_API_KEY: SecretStr \| None`, Compose secret `llm_api_key` | Secret; Ollama needs none |
-| `LLM_TIMEOUT_S = 60` | A 4096-character text with explanations from a small local model can take tens of seconds; without a timeout a hung provider holds the request forever |
-
-### Adapter `LiteLLMRewriter` (implements `TextRewriter`)
+### LiteLLM Proxy (Compose service `litellm`)
 
 | Decision | Why |
 | --- | --- |
+| Image `ghcr.io/berriai/litellm` pinned by digest; version ≥ 1.83.7, published before 2026-10-21, not 1.82.7, 1.82.8 or 1.107.0. The plan picks and checks the exact version | A digest cannot be swapped under us; the October compromise shipped in official images under a normal tag. ≥ 1.83.7 fixes the 2026 proxy CVEs (e.g. CVE-2026-42208 SQL injection in key checks, CVE-2026-42271 command execution) |
+| Same proxy in dev and prod; only its upstream changes | One code path everywhere; dev exercises the hop prod uses |
+| `ollama` on a separate `llm` network shared only with `litellm`; its host port is removed; models are pulled with `docker compose exec ollama ollama pull …` | The API cannot reach Ollama even by mistake; the host port was the other way around the proxy |
+| `litellm` publishes `127.0.0.1:4000`, like `postgres` | An API run on the host (`make dev-db` + `uv run`) must reach the proxy; localhost keeps it off the network |
+| One config file, `deploy/litellm/config.yaml`, with one model alias `engleks-rewrite` whose upstream comes from env: `model: os.environ/LLM_UPSTREAM_MODEL`, `api_base: os.environ/LLM_UPSTREAM_API_BASE`, `api_key: os.environ/OPENAI_API_KEY` | The API always asks for `engleks-rewrite`; switching Ollama ↔ OpenAI or changing models is a proxy env change, no API redeploy. One file means dev and prod configs cannot drift |
+| `num_retries: 0`; proxy request timeout just under `API_LLM_TIMEOUT_S` | Retries live in one place (the API's corrective retry), so the worst case stays predictable. The API gets a clean error instead of timing out first |
+| Admin UI enabled at `/ui`, reachable only on `127.0.0.1:4000` (prod: SSH tunnel) | Model management, keys, LLM spend and request logs without building them. Not exposed publicly, given the 2026 auth-bypass and SQL-injection CVEs |
+| UI login with `UI_USERNAME`/`UI_PASSWORD`, separate from the master key | A leaked UI password is not a leaked master key; the master key rotates without changing logins |
+| The API uses a virtual key restricted to `engleks-rewrite`; the master key is for admin work only | A leaked API key can call one model and cannot manage the proxy |
+| Prompts and responses are not stored in proxy spend logs; proxy log level `INFO`, never `DEBUG` | AGENTS.md: never log the user's text or the model's output. The plan checks the setting names against the pinned version |
+| Secrets `litellm_master_key`, `litellm_db_password`, `litellm_ui_username`, `litellm_ui_password`, `openai_api_key` (prod) are Compose secrets; a small `entrypoint` exports them from `/run/secrets/*`, then `exec`s LiteLLM | LiteLLM reads keys from env vars, not files; AGENTS.md keeps secrets in `/run/secrets`. The plan checks the image has `sh` |
+
+### Proxy database
+
+| Decision | Why |
+| --- | --- |
+| Database `litellm` with its own role on our Postgres server, created by an init script in `docker-entrypoint-initdb.d` | The Admin UI needs a database (logins, keys, spend). One server to run and back up. The separate role means a compromised proxy cannot read our tables. A separate database keeps LiteLLM's Prisma tables out of Alembic's view: in a shared schema, autogenerate would try to drop them |
+| LiteLLM migrates its own database at startup | That is how LiteLLM ships; Alembic stays responsible only for `engleks` |
+| Existing dev volumes are recreated once (`make down`, remove `pgdata`, `make up`) | Postgres runs init scripts only on an empty data directory |
+| `make llm-key` creates the API's virtual key via the proxy's `/key/generate` (master key, model `engleks-rewrite`) and prints it for `.env` | A one-time bootstrap that is repeatable and documented, rather than clicks in the UI |
+
+### API config (`API_` prefix)
+
+| Setting | Why |
+| --- | --- |
+| `LLM_BASE_URL` (`http://litellm:4000/v1` in Compose, `http://localhost:4000/v1` on the host) | The proxy's OpenAI-compatible endpoint |
+| `LLM_MODEL = engleks-rewrite` | The proxy alias, not a provider model |
+| `LLM_API_KEY: SecretStr`, Compose secret `api_llm_key` | The API's virtual key |
+| `LLM_TIMEOUT_S = 60` | A 4096-character text with explanations from a small local model can take tens of seconds; without a timeout a hung upstream holds the request forever |
+
+### Adapter `ProxyRewriter` (`infra/llm/`, implements `TextRewriter`)
+
+| Decision | Why |
+| --- | --- |
+| `httpx2` POST to `{LLM_BASE_URL}/chat/completions` with `Authorization: Bearer <virtual key>` | The proxy is OpenAI-compatible; `httpx2` is already in the workspace. The API does not depend on the `litellm` package |
 | Prompt `prompts/process_text.v1.j2`, rendered with Jinja2; version string `process_text.v1` logged and stored | AGENTS.md: a changed prompt is a new file. The stored version lets prompt versions be compared |
 | Instructions in the system message; the user's text alone in the user message, never in the template | Text like "ignore previous instructions" stays data. An identical system prefix qualifies for OpenAI's automatic prompt caching (prefixes of 1024+ tokens) |
 | `temperature = 0.2` | Corrections should be reproducible |
-| Infra-only Pydantic model `LLMRewrite` → JSON schema as `response_format` | LiteLLM passes it to OpenAI as strict structured output and to Ollama as `format`: one code path for both |
+| Infra-only Pydantic model `LLMRewrite` → JSON schema as `response_format` | The proxy passes it to OpenAI as strict structured output and to Ollama as `format`: one code path for both |
 | Validate with `model_validate_json`; on failure retry once, appending the invalid reply and the validation error | Architecture §2 asks for one retry. A plain resend at low temperature tends to repeat the mistake; a small model needs to be told what was wrong |
+| Tokens from the body's `usage`; model from the body's `model`; cost from the `x-litellm-response-cost` header, `None` plus a `llm_cost_unknown` log when missing | The proxy computes cost from LiteLLM's price map. `0` for an unpriced model would be a lie. The `llm` test checks `model` names the upstream model, not the alias, since that is what we store |
 | `Usage` sums both attempts | Both cost money |
-| Cost from `litellm.completion_cost`; `None` and a `llm_cost_unknown` log when LiteLLM has no price | Ollama is free, so `0`. For an unpriced cloud model `0` would be a lie |
-| Timeout, connection, auth, provider errors and a second invalid reply raise `RewriteFailed(reason)` | Use cases must not know LiteLLM's exception classes. The client can't fix any of these, so one error code; `reason` separates them in logs |
-| The completion function is a constructor argument, default `litellm.acompletion` | Tests script exact consecutive responses ("invalid, then valid"); LiteLLM's `mock_response` cannot, and ties tests to its internals |
+| Timeout, connection errors, non-2xx responses and a second invalid reply raise `RewriteFailed(reason)` | Use cases must not know HTTP details. The client can't fix any of these, so one error code; `reason` separates them in logs |
+| An `httpx2` transport is a constructor argument | Tests inject `httpx2.MockTransport` to script exact consecutive responses ("invalid, then valid"), as the bot tests do |
 | Every attempt logs `llm_call`: `model`, `prompt_version`, `attempt`, `tokens_in`, `tokens_out`, `cost`, `duration_ms` | AGENTS.md logging rules |
-| LiteLLM's loggers forced to `WARNING` regardless of `API_LOG_LEVEL` | At `DEBUG` LiteLLM logs request bodies, which contain the user's text |
-| `litellm` imported only in `infra/llm/` | Already enforced by import-linter |
 
-### Dependency hardening
+### Dependencies and scanning
 
-- `litellm` pinned `==` to a release that is ≥ 1.83.7 (earlier versions trip `make scan` on proxy CVEs, e.g. CVE-2026-42208, CVE-2026-42271), published before 2026-10-21, and not 1.82.7, 1.82.8 or 1.107.0. The exact version is chosen and checked in the plan.
-- `jinja2` declared directly: LiteLLM pulls it in, but we import it.
-- `uv.lock` records hashes; `uv sync` verifies them.
+- API runtime dependencies: `httpx2` (already in the workspace and lock) and `jinja2`. No `litellm` Python package; it stays on import-linter's forbidden lists.
+- `make scan` and the CI scan job add `trivy image` for the pinned LiteLLM image: `trivy fs` never looks inside images, and the proxy is the largest new risk.
 
 ## 7. Diff engine and reconciliation (`domain/diff.py`)
 
@@ -226,27 +256,39 @@ POST /v1/texts/process
 | Unit: reconcile | Exact match, containment with extra context, empty-side rule, unexplained → `other`, invented change dropped, two model changes in one hunk | One row per rule in §7 |
 | Unit: use case | Fakes: EN path saves spans; UK path skips the diff; failure saves nothing | Use case requirements, no Docker |
 | Unit: authenticate | Same identity twice → same user | Find-or-create contract |
-| Unit: adapter | Scripted completion function: valid; invalid then valid (corrective message sent, usage summed); invalid twice → `RewriteFailed`; timeout → `RewriteFailed`; user text absent from the system message | §6 decisions |
+| Unit: adapter | `httpx2.MockTransport`: valid; invalid then valid (corrective message sent, usage summed); invalid twice → `RewriteFailed`; timeout and non-2xx → `RewriteFailed`; missing cost header → `cost=None`; bearer key and `engleks-rewrite` model sent; user text absent from the system message | §6 decisions |
 | Integration: Postgres | Concurrent find-or-create via `asyncio.gather` → one user; interaction with corrections round-trips; existing `alembic check` passes | Only a real database proves `ON CONFLICT` and model/migration parity |
 | Integration: HTTP | `client_for(create_app(pg_settings))`, fake rewriter: 401 without or with a wrong token, 401 with a bad user id, 422 blank text, 502 on failure, 200 with rows saved | Endpoint contract end to end, no LLM |
-| `@pytest.mark.llm` | Configured model: English text with known errors → valid result with at least one explained change; UA text → `source_language = uk` | Proves prompt and schema with real models; asserts structure, not wording |
+| `@pytest.mark.llm` | Through the running proxy: English text with known errors → valid result with at least one explained change; UA text → `source_language = uk`; stored `model` is the upstream model, not the alias | Proves prompt, schema and proxy hop with real models; asserts structure, not wording |
 
 ## 11. Configuration, Compose and docs changes
 
 Approved as part of this design (AGENTS.md "ask before" items):
 
-- Runtime dependencies `litellm` (pinned, §6) and `jinja2`.
-- `compose.yaml`: mount the existing `service_token` secret into `api` as `api_service_token`; add an `llm_api_key` secret for `api`; set `API_LLM_MODEL` and `API_LLM_API_BASE` on `api`, pointing at the `ollama` service for dev.
+- API runtime dependencies `httpx2` and `jinja2`.
+- `compose.yaml`:
+  - new `litellm` service (§6), pinned by digest, publishing `127.0.0.1:4000`, `DATABASE_URL` to the `litellm` database, secrets exported by an entrypoint;
+  - new `llm` network shared by `litellm` and `ollama` only; `ollama` loses its host port;
+  - Postgres init script creating the `litellm` role and database;
+  - new secrets `litellm_master_key`, `litellm_db_password`, `litellm_ui_username`, `litellm_ui_password`, `openai_api_key` (prod), `api_llm_key`; existing `service_token` also mounted into `api` as `api_service_token`;
+  - `API_LLM_BASE_URL` and `API_LLM_MODEL` set on `api`.
+- CI and `make scan`: add `trivy image` for the pinned LiteLLM image.
 
 Updated in the same change:
 
-- `.env.example`: `API_SERVICE_TOKEN`, `API_LLM_MODEL`, `API_LLM_API_BASE`, `API_LLM_API_KEY`, `API_LLM_TIMEOUT_S`.
+- `Makefile`: `llm-key` target (§6).
+- `deploy/litellm/config.yaml` (§6).
+- `.env.example`: `API_SERVICE_TOKEN`, `API_LLM_BASE_URL`, `API_LLM_MODEL`, `API_LLM_API_KEY`, `API_LLM_TIMEOUT_S`, and the proxy's `LLM_UPSTREAM_MODEL`, `LLM_UPSTREAM_API_BASE`, master key, DB password, UI credentials, `OPENAI_API_KEY`.
+- `README.md`: dev setup gains pulling the Ollama model, recreating the dev volume once, and `make llm-key`.
 - `docs/architecture.md`: `user` → `app_user`, the category list, the response shape.
-- `AGENTS.md`: the first repository, LLM adapter and auth dependency patterns (its "keeping this file current" rule).
+- `docs/architecture.md` also: the LiteLLM proxy in the component diagram and in §9 Deployment (add `litellm` to `api`, `bot` and `postgres`, plus `ollama` in dev).
+- `AGENTS.md`: the first repository, LLM adapter (via the proxy) and auth dependency patterns (its "keeping this file current" rule).
 
 ## 12. Definition of done
 
-- `make lint && make test` pass; `make test-llm` passes against Ollama.
-- `make scan` reports no fixable findings.
+- `make lint && make test` pass; `make test-llm` passes through the proxy against Ollama.
+- `make scan` (filesystem and LiteLLM image) reports no fixable findings.
+- The API container cannot resolve or reach `ollama`.
+- The LiteLLM Admin UI is reachable on `127.0.0.1:4000/ui` and shows the `engleks-rewrite` model and the API's virtual key.
 - With `make up`, a `curl` to `/v1/texts/process` with valid headers returns explained, positioned changes for English input and a translation for Ukrainian input, and the rows are in `interaction` and `correction`.
 - No log line contains the user's text or the model's output.
