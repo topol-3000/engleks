@@ -38,5 +38,38 @@ docker compose up -d postgres
 docker compose exec postgres sh /docker-entrypoint-initdb.d/10-litellm.sh
 ```
 
+## Changing a secret
+
+Compose passes secrets from `.env` into containers, but a changed value does not count as a
+change: `make up` keeps the old one. After editing a secret in `.env`, recreate the services
+that use it:
+
+```bash
+docker compose up -d --force-recreate --no-deps <service>...
+```
+
+| Secret in `.env` | Services | Also needed |
+| --- | --- | --- |
+| `BOT_SERVICE_TOKEN` | `api`, `bot` | set `API_SERVICE_TOKEN` to the same value for host runs |
+| `BOT_TELEGRAM_TOKEN` | `bot` | |
+| `API_LLM_API_KEY` | `api` | |
+| `LITELLM_UI_USERNAME`, `LITELLM_UI_PASSWORD`, `OPENAI_API_KEY` | `litellm` | |
+| `LITELLM_MASTER_KEY` | `litellm` | it invalidates the API's key: then run `make llm-key`, put the key into `.env` and recreate `api` |
+| `LITELLM_DB_PASSWORD` | `litellm` | change the role's password first (below) |
+| `API_DB_PASSWORD` | `migrate`, `api` | change the role's password first (below) |
+
+Postgres sets passwords only when it creates a role, so a database password also has to be
+changed inside Postgres, before recreating the services:
+
+```bash
+set -a; . ./.env; set +a
+# LITELLM_DB_PASSWORD
+echo "ALTER ROLE litellm PASSWORD :'pw';" | docker compose exec -T postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v pw="$1"' sh "$LITELLM_DB_PASSWORD"
+# API_DB_PASSWORD
+echo "ALTER ROLE CURRENT_USER PASSWORD :'pw';" | docker compose exec -T postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v pw="$1"' sh "$API_DB_PASSWORD"
+```
+
 - [AGENTS.md](AGENTS.md): commands, layout, rules and conventions
 - [docs/architecture.md](docs/architecture.md): MVP scope and architecture
