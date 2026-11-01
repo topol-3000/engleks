@@ -18,7 +18,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package engleks-api
 
 FROM ${PYTHON_IMAGE}
-RUN groupadd --system --gid 10001 app \
+# pip is not needed at runtime, and its vendored libraries (urllib3) carry CVEs.
+RUN python -m pip uninstall --yes pip \
+    && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
