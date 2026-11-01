@@ -1,0 +1,45 @@
+[project]
+name = "engleks"
+version = "0.0.0"
+requires-python = ">=3.14"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*"]
+
+[dependency-groups]
+dev = [
+    "httpx",
+    "import-linter",
+    "pre-commit",
+    "pyright",
+    "pytest",
+    "pytest-asyncio",
+    "respx",
+    "ruff",
+    "testcontainers[postgres]",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+strict = ["apps/api/src/engleks_api/domain", "apps/api/src/engleks_api/application"]
+include = ["apps", "packages"]
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["packages/contracts/tests", "apps/api/tests", "apps/bot/tests"]
+addopts = "--import-mode=importlib -m 'not llm'"
+asyncio_mode = "auto"
+markers = ["llm: calls a real LLM provider; excluded by default"]
