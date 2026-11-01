@@ -6,6 +6,7 @@ lint:
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run pyright
+	uv run lint-imports
 fmt:
 	uv run ruff format .
 	uv run ruff check --fix .
