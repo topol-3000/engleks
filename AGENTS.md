@@ -96,7 +96,8 @@ Never add an import-linter exception to get green; change the design instead.
 | an LLM-backed task | task-level port in `domain/ports.py` (e.g. `TextRewriter`), adapter in `infra/llm/` that calls only the LiteLLM proxy over `httpx2` and validates the output into an infra Pydantic model (see `ProxyRewriter`) |
 | a prompt | `infra/llm/prompts/<name>.v<N>.j2`; a changed prompt is a new version, never an edit |
 | an endpoint that needs the caller | `auth: Annotated[AuthContext, Depends(auth_context)]` from `transport/auth.py`; use cases receive `AuthContext`, never headers |
-| a bot command or button | `handlers/<feature>.py` router, included in the bot's `main.py`; layout in `rendering/` |
+| a shared object in the bot (`ApiClient`, the in-flight set) | dispatcher workflow data in `main.build_dispatcher()`, received as a handler argument |
+| a bot command or button | `handlers/<feature>.py` with a `build_router()` factory, included in `main.build_dispatcher()`; layout in `rendering/` |
 
 ## Code rules
 
@@ -135,7 +136,7 @@ Never add an import-linter exception to get green; change the design instead.
   Postgres, `db_session` for a raw session and `sessions` for repositories (a sessionmaker
   whose commits are savepoints; both are rolled back after each test).
   HTTP tests replace the LLM with `app.dependency_overrides[text_rewriter] = lambda: fake`.
-- Bot tests mock the API with `httpx2.MockTransport`, building responses from real `engleks_contracts` DTOs. Handler tests use real aiogram objects bound to a `Bot` on the `RecordingSession` fixture (`apps/bot/tests/conftest.py`), never `AsyncMock(spec=Message)`.
+- Bot tests mock the API with `httpx2.MockTransport`, building responses from real `engleks_contracts` DTOs. Handler tests use real aiogram objects bound to a `Bot` on the `RecordingSession` fixture (`apps/bot/tests/conftest.py`), never `AsyncMock(spec=Message)`. Bot routing (filters, commands, callbacks, injection, the errors handler) is tested through `build_dispatcher(...).feed_update` on the `RecordingSession` bot.
 - No test calls a real LLM or Telegram, except ones marked `@pytest.mark.llm`
   (run with `make test-llm`, never in CI).
 
