@@ -1,4 +1,4 @@
-.PHONY: install lint fmt test test-llm migrate revision
+.PHONY: install lint fmt test test-llm migrate revision dev-db up down
 install:
 	uv sync --all-packages
 	uv run pre-commit install
@@ -19,3 +19,9 @@ migrate:
 	$(ALEMBIC) upgrade head
 revision:
 	$(ALEMBIC) revision --autogenerate -m "$(m)"
+dev-db:
+	docker compose up -d --wait postgres
+up:
+	docker compose up -d --build
+down:
+	docker compose down
