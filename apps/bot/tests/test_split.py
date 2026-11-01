@@ -35,3 +35,10 @@ def test_astral_chars_counted_as_two_units():
     assert all(u16(c) <= 4096 for c in chunks)
     assert chunks[0] == "😀" * 2048
     assert "".join(chunks) == "😀" * 3000
+
+
+def test_utf16_len():
+    from engleks_bot.rendering.split import utf16_len
+
+    assert utf16_len("a😀") == 3
+    assert utf16_len("") == 0

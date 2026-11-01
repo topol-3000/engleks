@@ -6,6 +6,10 @@ def _units(ch: str) -> int:
     return 2 if ord(ch) > 0xFFFF else 1
 
 
+def utf16_len(text: str) -> int:
+    return sum(_units(ch) for ch in text)
+
+
 def split_message(text: str, limit: int = TELEGRAM_LIMIT) -> list[str]:
     """Split text into Telegram-sized chunks, preferring newline, then space boundaries.
 
