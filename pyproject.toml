@@ -77,10 +77,24 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Only main connects infra"
+type = "forbidden"
+source_modules = ["engleks_api.transport", "engleks_api.admin"]
+forbidden_modules = ["engleks_api.infra"]
+
+[[tool.importlinter.contracts]]
 name = "Pure core"
 type = "forbidden"
 source_modules = ["engleks_api.domain", "engleks_api.application"]
-forbidden_modules = ["fastapi", "sqlalchemy", "httpx", "litellm", "aiogram"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "sqlalchemy",
+    "asyncpg",
+    "httpx",
+    "litellm",
+    "aiogram",
+]
 
 [[tool.importlinter.contracts]]
 name = "Apps are independent"
@@ -92,6 +106,23 @@ name = "Contracts import neither app"
 type = "forbidden"
 source_modules = ["engleks_contracts"]
 forbidden_modules = ["engleks_api", "engleks_bot"]
+
+[[tool.importlinter.contracts]]
+name = "Contracts depend only on pydantic"
+type = "forbidden"
+source_modules = ["engleks_contracts"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "sqlalchemy",
+    "asyncpg",
+    "alembic",
+    "httpx",
+    "litellm",
+    "aiogram",
+    "structlog",
+    "pydantic_settings",
+]
 
 [[tool.importlinter.contracts]]
 name = "Contracts only at the edge"

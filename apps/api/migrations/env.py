@@ -1,5 +1,5 @@
 import asyncio
-from logging.config import fileConfig
+import os
 
 from alembic import context
 from sqlalchemy import pool
@@ -8,11 +8,16 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from engleks_api.config import Settings
 from engleks_api.infra.db.base import Base
+from engleks_api.logging_setup import configure_logging
 
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name, disable_existing_loggers=False)
+# Same log pipeline as the API (JSON in containers). Read from the environment
+# directly: full Settings would require the DB password even for offline runs.
+configure_logging(
+    "json" if os.environ.get("API_LOG_FORMAT") == "json" else "console",
+    os.environ.get("API_LOG_LEVEL", "INFO"),
+)
 
 target_metadata = Base.metadata
 

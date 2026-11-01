@@ -117,6 +117,12 @@ jobs:
           persist-credentials: false
       - name: Build image (no push)
         run: docker build -f apps/${{ matrix.app }}/Dockerfile -t engleks-${{ matrix.app }}:ci .
+      # CI tests run in one venv with every package; this catches a runtime
+      # dependency missing from this app's image.
+      - name: Smoke-import the app inside its image
+        run: docker run --rm --entrypoint python "engleks-${APP}:ci" -c "import engleks_${APP}.main"
+        env:
+          APP: ${{ matrix.app }}
       - name: Trivy report (all findings, never fails)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
