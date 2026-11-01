@@ -1,10 +1,10 @@
 # pyright: reportCallIssue=false
 # Pyright cannot see pydantic-settings init options (_env_file, _secrets_dir).
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -24,14 +24,14 @@ POSTGRES_IMAGE = (
 
 ALEMBIC_INI = Path(__file__).parents[2] / "alembic.ini"
 
-ClientFactory = Callable[[FastAPI], AbstractAsyncContextManager[httpx.AsyncClient]]
+ClientFactory = Callable[[FastAPI], AbstractAsyncContextManager[httpx2.AsyncClient]]
 
 
 @asynccontextmanager
-async def _client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
-    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+async def _client(app: FastAPI) -> AsyncGenerator[httpx2.AsyncClient]:
+    transport = httpx2.ASGITransport(app=app, raise_app_exceptions=False)
     try:
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        async with httpx2.AsyncClient(transport=transport, base_url="http://test") as c:
             yield c
     finally:
         # ASGITransport does not run the lifespan, so dispose the engine here.
@@ -49,7 +49,7 @@ def app() -> FastAPI:
 
 
 @pytest.fixture
-async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+async def client(app: FastAPI) -> AsyncIterator[httpx2.AsyncClient]:
     async with _client(app) as c:
         yield c
 

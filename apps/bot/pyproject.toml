@@ -5,7 +5,7 @@ requires-python = ">=3.14"
 dependencies = [
     "aiogram>=3",
     "engleks-contracts",
-    "httpx",
+    "httpx2>=2.16.0",
     "pydantic-settings>=2.6",
     "structlog",
 ]

@@ -11,13 +11,12 @@ members = ["apps/*", "packages/*"]
 
 [dependency-groups]
 dev = [
-    "httpx",
+    "httpx2>=2.16.0",
     "import-linter",
     "pre-commit",
     "pyright",
     "pytest",
     "pytest-asyncio",
-    "respx",
     "ruff",
     "testcontainers[postgres]",
 ]
@@ -92,6 +91,7 @@ forbidden_modules = [
     "sqlalchemy",
     "asyncpg",
     "httpx",
+    "httpx2",
     "litellm",
     "aiogram",
 ]
@@ -118,6 +118,7 @@ forbidden_modules = [
     "asyncpg",
     "alembic",
     "httpx",
+    "httpx2",
     "litellm",
     "aiogram",
     "structlog",

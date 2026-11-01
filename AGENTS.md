@@ -127,7 +127,7 @@ Never add an import-linter exception to get green; change the design instead.
 - Integration tests (`apps/api/tests/integration/`): fixtures in `conftest.py`.
   `client` for HTTP without a DB, `client_for(create_app(pg_settings))` for HTTP with
   Postgres, `db_session` for repositories (rolled back after each test).
-- Bot tests mock the API with `respx`, building responses from real `engleks_contracts` DTOs.
+- Bot tests mock the API with `httpx2.MockTransport`, building responses from real `engleks_contracts` DTOs.
 - No test calls a real LLM or Telegram, except ones marked `@pytest.mark.llm`
   (run with `make test-llm`, never in CI).
 
