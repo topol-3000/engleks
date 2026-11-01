@@ -71,7 +71,7 @@ engleks/
       src/engleks_bot/
         main.py             # aiogram dispatcher, long polling
         config.py
-        api_client.py       # httpx client, sends X-Bot-Token and X-Telegram-User-Id
+        api_client.py       # httpx2 client, sends X-Bot-Token and X-Telegram-User-Id
         handlers/
         rendering/          # message splitting (4096 chars), inline keyboards
       tests/

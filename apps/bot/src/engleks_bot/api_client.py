@@ -1,7 +1,7 @@
 from types import TracebackType
 from typing import Self
 
-import httpx
+import httpx2
 from pydantic import BaseModel, ValidationError
 
 from engleks_contracts import ErrorCode, ErrorResponse, HealthResponse
@@ -23,10 +23,10 @@ class ApiClient:
         base_url: str,
         service_token: str,
         *,
-        transport: httpx.AsyncBaseTransport | None = None,
+        transport: httpx2.AsyncBaseTransport | None = None,
         timeout: float = 10.0,
     ) -> None:
-        self._http = httpx.AsyncClient(
+        self._http = httpx2.AsyncClient(
             base_url=base_url,
             headers={"X-Bot-Token": service_token},
             transport=transport,
@@ -39,7 +39,7 @@ class ApiClient:
     async def _request[T: BaseModel](self, method: str, path: str, model: type[T]) -> T:
         try:
             response = await self._http.request(method, path)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise ApiError(None, None) from exc
         if not response.is_success:
             raise ApiError(response.status_code, _error_code(response))
@@ -63,7 +63,7 @@ class ApiClient:
         await self.aclose()
 
 
-def _error_code(response: httpx.Response) -> ErrorCode | None:
+def _error_code(response: httpx2.Response) -> ErrorCode | None:
     try:
         return ErrorResponse.model_validate_json(response.content).code
     except ValidationError:
