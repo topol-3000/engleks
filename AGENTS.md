@@ -93,6 +93,7 @@ Never add an import-linter exception to get green; change the design instead.
 | a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret |
 | a DB table | model on `Base` in `infra/db/` + `make revision m="..."` |
 | a repository | port in `domain/ports.py`, adapter in `infra/db/repositories.py` that takes the `async_sessionmaker` and opens one session and transaction per method (see `SqlInteractionRepository`); built in `create_app()`, never in `transport` |
+| an LLM-backed task | task-level port in `domain/ports.py` (e.g. `TextRewriter`), adapter in `infra/llm/` that calls only the LiteLLM proxy over `httpx2` and validates the output into an infra Pydantic model (see `ProxyRewriter`) |
 | a prompt | `infra/llm/prompts/<name>.v<N>.j2`; a changed prompt is a new version, never an edit |
 | a bot command or button | `handlers/<feature>.py` router, included in the bot's `main.py`; layout in `rendering/` |
 
@@ -106,6 +107,8 @@ Never add an import-linter exception to get green; change the design instead.
   everything else gets values or adapters passed in.
 - Secrets are `SecretStr`, read from `/run/secrets` in containers and from `.env` locally.
 - LLM output is always parsed into a Pydantic model; raw LLM text never reaches the domain.
+- The API calls LLMs only through the LiteLLM proxy, never a provider or Ollama directly,
+  and never depends on the `litellm` package.
 - Migrations run in the `migrate` Compose service, never on API startup. A test runs
   `alembic check`, so models and migrations must match. Never edit a migration that is on
   `main`; add a new one.
