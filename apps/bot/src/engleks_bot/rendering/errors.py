@@ -1,9 +1,12 @@
 from engleks_bot.api_client import ApiError
 from engleks_contracts import ErrorCode, Mode
 
+MAX_INPUT_CHARS = 1000
+
 UNAVAILABLE = "The service is unavailable right now. Please try again in a minute."
 NO_ACCESS = "You don't have access to this bot yet."
 CANNOT_PROCESS = "I couldn't process this text."
+TOO_LONG = f"This text is too long. Please send up to {MAX_INPUT_CHARS} characters at a time."
 LLM_DOWN = "The language model didn't respond. Please try again."
 GENERIC = "Something went wrong. Please try again."
 SEND_TEXT = "Send me text and I'll correct it."

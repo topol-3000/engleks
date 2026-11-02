@@ -10,7 +10,15 @@ from aiogram.types import User
 
 from engleks_bot.handlers.start import HELP_TEXT
 from engleks_bot.handlers.texts import on_command, on_other, on_text
-from engleks_bot.rendering.errors import CANNOT_PROCESS, LLM_DOWN, NO_ACCESS, SEND_TEXT, UNAVAILABLE
+from engleks_bot.rendering.errors import (
+    CANNOT_PROCESS,
+    LLM_DOWN,
+    MAX_INPUT_CHARS,
+    NO_ACCESS,
+    SEND_TEXT,
+    TOO_LONG,
+    UNAVAILABLE,
+)
 from engleks_bot.rendering.keyboards import keyboard_modes
 from engleks_contracts import Category, ChangeItem, Language, Mode, ProcessTextResponse
 
@@ -120,6 +128,20 @@ async def test_blank_text_makes_no_call_and_no_log(make_message, make_api, bot, 
         await on_text(make_message(" \n "), USER, make_api(handler), bot)
     assert [m.text for m in sent()] == [CANNOT_PROCESS]
     assert logs == []
+
+
+async def test_text_over_limit_is_rejected_without_api_call(make_message, make_api, bot, sent):
+    def handler(_):
+        pytest.fail("API must not be called")
+
+    await on_text(make_message("a" * (MAX_INPUT_CHARS + 1)), USER, make_api(handler), bot)
+    assert [m.text for m in sent()] == [TOO_LONG]
+
+
+async def test_text_at_limit_is_processed(make_message, make_api, bot, sent):
+    text = "a" * MAX_INPUT_CHARS
+    await on_text(make_message(text), USER, make_api(reply_with(ok())), bot)
+    assert next(m.text for m in sent()).startswith("I went.")
 
 
 async def test_logs_never_contain_text(make_message, make_api, bot):

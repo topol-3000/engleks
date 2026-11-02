@@ -10,7 +10,13 @@ from pydantic import ValidationError
 
 from engleks_bot.api_client import ApiClient, ApiError
 from engleks_bot.handlers.start import HELP_TEXT
-from engleks_bot.rendering.errors import CANNOT_PROCESS, SEND_TEXT, error_text
+from engleks_bot.rendering.errors import (
+    CANNOT_PROCESS,
+    MAX_INPUT_CHARS,
+    SEND_TEXT,
+    TOO_LONG,
+    error_text,
+)
 from engleks_bot.rendering.keyboards import rerun_keyboard
 from engleks_bot.rendering.reply import render_reply
 from engleks_contracts import Mode, ProcessTextRequest
@@ -42,6 +48,10 @@ async def process_and_reply(
         )
 
     text = original.text or ""
+    if len(text) > MAX_INPUT_CHARS:
+        log.info("input_too_long", text_len=len(text), limit=MAX_INPUT_CHARS)
+        await reply(Text(TOO_LONG))
+        return False
     try:
         request = ProcessTextRequest(text=text, mode=mode)
     except ValidationError:
