@@ -1,4 +1,6 @@
-"""Create the API's virtual key, restricted to engleks-rewrite. Run inside the litellm container.
+"""Create the API's virtual key, restricted to the models in config.yaml.
+
+Run inside the litellm container.
 
 Standard library only: the image has no curl.
 """
@@ -10,11 +12,10 @@ import urllib.request
 from pathlib import Path
 
 master_key = Path("/run/secrets/litellm_master_key").read_text().strip()
+models = ["engleks-rewrite", "claude-sonnet-5-5", "claude-haiku-5-5", "gemma4-12b", "qwen3.8-27b"]
 request = urllib.request.Request(
     "http://localhost:4000/key/generate",
-    data=json.dumps(
-        {"models": ["engleks-rewrite"], "metadata": {"service": "engleks-api"}}
-    ).encode(),
+    data=json.dumps({"models": models, "metadata": {"service": "engleks-api"}}).encode(),
     headers={"Authorization": f"Bearer {master_key}", "Content-Type": "application/json"},
     method="POST",
 )
