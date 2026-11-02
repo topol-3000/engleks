@@ -17,7 +17,7 @@ AUTH = AuthContext(user_id=uuid4())
 
 
 def outcome(lang: Language, output_text: str, explanations: list[str]) -> RewriteOutcome:
-    usage = Usage("m", "process_text.v4", 10, 5, Decimal("0.001"))
+    usage = Usage("m", "process_text.v5", 10, 5, Decimal("0.001"))
     return RewriteOutcome(lang, output_text, explanations, usage, llm_response={})
 
 

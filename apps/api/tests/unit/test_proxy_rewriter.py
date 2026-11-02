@@ -18,7 +18,7 @@ from engleks_api.infra.llm.proxy_rewriter import ProxyRewriter
 Handler = Callable[[httpx2.Request], httpx2.Response]
 
 TEXT = "He go home."
-V4_PROMPT = Path(engleks_api.infra.llm.__file__).parent / "prompts" / "process_text.v4.j2"
+V5_PROMPT = Path(engleks_api.infra.llm.__file__).parent / "prompts" / "process_text.v5.j2"
 VALID = json.dumps(
     {
         "source_language": "en",
@@ -79,7 +79,7 @@ async def test_valid_reply():
     assert (out.source_language, out.output_text) == (Language.EN, "He goes home.")
     assert out.explanations == ["Add -s to the verb after he, she or it: 'He goes home.'"]
     assert out.usage == Usage(
-        "ollama_chat/gemma3:4b", "process_text.v4", 100, 50, Decimal("0.0001")
+        "ollama_chat/gemma3:4b", "process_text.v5", 100, 50, Decimal("0.0001")
     )
     assert out.llm_response == json.loads(VALID)
 
@@ -110,11 +110,11 @@ async def test_user_text_is_wrapped_verbatim():
     assert user["content"] == f"<text>{text}</text>"
 
 
-async def test_system_prompt_is_v4_verbatim():
+async def test_system_prompt_is_v5_verbatim():
     seen: list[httpx2.Request] = []
     await make(recording([completion(VALID)], seen)).rewrite(TEXT)
     system = json.loads(seen[0].content)["messages"][0]["content"]
-    assert system == V4_PROMPT.read_text().rstrip("\n")
+    assert system == V5_PROMPT.read_text().rstrip("\n")
 
 
 async def test_invalid_then_valid_sends_correction_and_sums_usage():
@@ -124,7 +124,7 @@ async def test_invalid_then_valid_sends_correction_and_sums_usage():
     retry = json.loads(seen[1].content)["messages"]
     assert len(retry) == 4
     assert retry[2] == {"role": "assistant", "content": "not json"}
-    # v4 reads every user message as text to edit, so the correction is a system message.
+    # The prompt reads every user message as text to edit, so the correction is a system message.
     assert retry[3]["role"] == "system"
     assert "did not match the required JSON schema" in retry[3]["content"]
     assert (out.usage.tokens_in, out.usage.tokens_out, out.usage.cost) == (

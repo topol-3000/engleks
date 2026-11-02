@@ -21,7 +21,7 @@ def interaction(user_id: uuid.UUID) -> Interaction:
         source_language=Language.EN,
         output_text="He goes home, right?",
         explanations=["Add -s to the verb after he, she or it."],
-        usage=Usage("ollama/qwen", "process_text.v4", 120, 45, Decimal("0.00012345")),
+        usage=Usage("ollama/qwen", "process_text.v5", 120, 45, Decimal("0.00012345")),
         llm_response={
             "source_language": "en",
             "output_text": "He goes home, right?",
@@ -63,7 +63,7 @@ async def test_interaction_round_trip(sessions):
     assert (row.user_id, row.cost, row.prompt_version, row.model) == (
         user_id,
         Decimal("0.00012345"),
-        "process_text.v4",
+        "process_text.v5",
         "ollama/qwen",
     )
     assert row.source_language == "en"

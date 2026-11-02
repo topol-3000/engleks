@@ -16,7 +16,7 @@ from engleks_api.infra.llm.schema import LLMRewrite
 
 log = structlog.stdlib.get_logger()
 
-PROMPT_VERSION = "process_text.v4"
+PROMPT_VERSION = "process_text.v5"
 _TEMPERATURE = 0.2
 
 _prompts = Environment(
