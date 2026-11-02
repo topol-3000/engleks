@@ -80,8 +80,8 @@ async def process_and_reply(
 async def on_text(message: Message, event_from_user: User, api: ApiClient, bot: Bot) -> None:
     await process_and_reply(
         message,
-        Mode.MINIMAL,
-        [Mode.NATURAL, Mode.POLISHED],
+        Mode.NATURAL,
+        [Mode.MINIMAL, Mode.POLISHED],
         user_id=event_from_user.id,
         api=api,
         bot=bot,

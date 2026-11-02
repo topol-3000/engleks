@@ -31,7 +31,7 @@ class ProcessTextRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     text: str = Field(min_length=1, max_length=4096)
-    mode: Mode = Mode.MINIMAL
+    mode: Mode = Mode.NATURAL
     explanation_language: Language = Language.EN
 
     @field_validator("text")

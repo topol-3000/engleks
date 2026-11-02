@@ -28,7 +28,7 @@ def change(original: str, replacement: str) -> ChangeItem:
     )
 
 
-def ok(*, output="I went.", mode=Mode.MINIMAL, changes=()) -> ProcessTextResponse:
+def ok(*, output="I went.", mode=Mode.NATURAL, changes=()) -> ProcessTextResponse:
     return ProcessTextResponse(
         interaction_id=UUID(int=1),
         source_language=Language.EN,
@@ -54,7 +54,7 @@ async def test_request_and_reply(make_message, make_api, bot, sent):
     await on_text(make_message("I has went."), USER, make_api(handler), bot)
     assert json.loads(seen[0].content) == {
         "text": "I has went.",
-        "mode": "minimal",
+        "mode": "natural",
         "explanation_language": "en",
     }
     assert seen[0].headers["X-Telegram-User-Id"] == "1"
@@ -62,7 +62,7 @@ async def test_request_and_reply(make_message, make_api, bot, sent):
     assert msg.reply_parameters.message_id == 10
     assert msg.reply_parameters.allow_sending_without_reply is True
     assert msg.link_preview_options.is_disabled is True and msg.parse_mode is None
-    assert keyboard_modes(msg.reply_markup) == [Mode.NATURAL, Mode.POLISHED]
+    assert keyboard_modes(msg.reply_markup) == [Mode.MINIMAL, Mode.POLISHED]
 
 
 async def test_markup_in_output_arrives_verbatim(make_message, make_api, bot, sent):
@@ -81,7 +81,7 @@ async def test_long_reply_only_last_has_keyboard(make_message, make_api, bot, se
     assert all(m.reply_parameters.message_id == 10 for m in msgs)
     assert all(m.reply_parameters.allow_sending_without_reply is True for m in msgs)
     assert all(m.reply_markup is None for m in msgs[:-1])
-    assert keyboard_modes(msgs[-1].reply_markup) == [Mode.NATURAL, Mode.POLISHED]
+    assert keyboard_modes(msgs[-1].reply_markup) == [Mode.MINIMAL, Mode.POLISHED]
 
 
 @pytest.mark.parametrize(
@@ -101,7 +101,7 @@ async def test_api_error_replies_and_logs(response, text, make_message, make_api
     [entry] = [e for e in logs if e["event"] == "api_call_failed"]
     assert entry["status_code"] == response.status_code
     assert entry["code"] == response.json()["code"]
-    assert entry["mode"] == "minimal"
+    assert entry["mode"] == "natural"
 
 
 async def test_network_failure(make_message, make_api, bot, sent):
@@ -128,7 +128,7 @@ async def test_logs_never_contain_text(make_message, make_api, bot):
         await on_text(make_message("My secret text"), USER, api, bot)
     [entry] = [e for e in logs if e["event"] == "text_processed"]
     assert entry["interaction_id"] == str(UUID(int=1))
-    assert entry["mode"] == "minimal"
+    assert entry["mode"] == "natural"
     assert entry["source_language"] == "en"
     assert entry["text_len"] == 14
     assert entry["changes"] == 1

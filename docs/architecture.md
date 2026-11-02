@@ -4,7 +4,7 @@
 
 A trainer for English writing, not a translator. The MVP includes:
 
-- **Improve**: modes `minimal` (default), `natural` and `polished`. Returns a list of changes, each with a category and an explanation.
+- **Improve**: modes `minimal`, `natural` (default) and `polished`. Returns a list of changes, each with a category and an explanation.
 - **Translate**: UA/RU → EN with automatic language detection, in the same LLM call as Improve.
 - **Context profiles**: 2–3 per user, plus request history.
 - **Multiple users**: invite codes, usage limits and a simple admin dashboard.

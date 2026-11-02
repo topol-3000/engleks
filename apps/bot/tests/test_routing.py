@@ -48,7 +48,7 @@ def dispatcher(make_api, api_calls):
         body = ProcessTextResponse(
             interaction_id=UUID(int=1),
             source_language=Language.EN,
-            mode=Mode.MINIMAL,
+            mode=Mode.NATURAL,
             output_text="I went.",
             changes=[],
         )

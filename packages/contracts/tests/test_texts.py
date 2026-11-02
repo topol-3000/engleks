@@ -16,7 +16,7 @@ from engleks_contracts import (
 
 def test_request_defaults():
     r = ProcessTextRequest(text="hi")
-    assert (r.mode, r.explanation_language) == (Mode.MINIMAL, Language.EN)
+    assert (r.mode, r.explanation_language) == (Mode.NATURAL, Language.EN)
 
 
 @pytest.mark.parametrize("text", ["", " ", "\n\t "])
