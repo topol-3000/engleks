@@ -6,6 +6,24 @@ model_list:
       model: os.environ/LLM_UPSTREAM_MODEL
       api_base: os.environ/LLM_UPSTREAM_API_BASE
       api_key: os.environ/OPENAI_API_KEY
+  # Extra aliases to try models: set API_LLM_MODEL to one of them. The Windows host's Ollama
+  # is reached through Docker Desktop's host.docker.internal (Ollama must listen on 0.0.0.0).
+  - model_name: claude-sonnet-5-5
+    litellm_params:
+      model: anthropic/claude-sonnet-5-5   # key: ANTHROPIC_API_KEY in the proxy's environment
+      drop_params: true   # it accepts only temperature=1; the API asks for 0.2
+  - model_name: claude-haiku-5-5
+    litellm_params:
+      model: anthropic/claude-haiku-5-5
+      drop_params: true   # same as sonnet: drop what the model doesn't accept
+  - model_name: mistral-small
+    litellm_params:
+      model: ollama_chat/mistral-small:latest
+      api_base: http://host.docker.internal:11434
+environment_variables:
+  # Spend logs cut stored prompts at 2048 chars by default; the prompt alone is ~7000 and
+  # the user's text adds up to 4096 (TextIn.text), so keep whole requests and responses.
+  MAX_STRING_LENGTH_PROMPT_IN_DB: "32768"
 litellm_settings:
   num_retries: 0                 # the API's corrective retry is the only retry
   request_timeout: 55            # just under API_LLM_TIMEOUT_S (60)

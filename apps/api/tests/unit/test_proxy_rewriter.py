@@ -1,18 +1,16 @@
 import json
 from collections.abc import Callable
 from decimal import Decimal
+from pathlib import Path
 
 import httpx2
 import pytest
 import structlog
 
+import engleks_api.infra.llm
 from engleks_api.domain.text_processing import (
-    Category,
     Language,
-    Mode,
-    ModelChange,
     RewriteFailed,
-    RewriteRequest,
     Usage,
 )
 from engleks_api.infra.llm.proxy_rewriter import ProxyRewriter
@@ -20,19 +18,12 @@ from engleks_api.infra.llm.proxy_rewriter import ProxyRewriter
 Handler = Callable[[httpx2.Request], httpx2.Response]
 
 TEXT = "He go home."
-REQ = RewriteRequest(TEXT, Mode.MINIMAL, Language.UK)
+V3_PROMPT = Path(engleks_api.infra.llm.__file__).parent / "prompts" / "process_text.v3.j2"
 VALID = json.dumps(
     {
         "source_language": "en",
         "output_text": "He goes home.",
-        "changes": [
-            {
-                "original": "go",
-                "replacement": "goes",
-                "category": "grammar",
-                "explanation": "Third person singular.",
-            }
-        ],
+        "explanations": ["Add -s to the verb after he, she or it: 'He goes home.'"],
     }
 )
 
@@ -84,18 +75,18 @@ def raises(exc: Exception) -> Handler:
 
 
 async def test_valid_reply():
-    out = await make(lambda _: completion(VALID)).rewrite(REQ)
+    out = await make(lambda _: completion(VALID)).rewrite(TEXT)
     assert (out.source_language, out.output_text) == (Language.EN, "He goes home.")
-    assert out.changes == [ModelChange("go", "goes", Category.GRAMMAR, "Third person singular.")]
+    assert out.explanations == ["Add -s to the verb after he, she or it: 'He goes home.'"]
     assert out.usage == Usage(
-        "ollama_chat/gemma3:4b", "process_text.v1", 100, 50, Decimal("0.0001")
+        "ollama_chat/gemma3:4b", "process_text.v3", 100, 50, Decimal("0.0001")
     )
     assert out.llm_response == json.loads(VALID)
 
 
 async def test_request_shape():
     seen: list[httpx2.Request] = []
-    await make(recording([completion(VALID)], seen)).rewrite(REQ)
+    await make(recording([completion(VALID)], seen)).rewrite(TEXT)
     body = json.loads(seen[0].content)
     assert seen[0].url.path == "/v1/chat/completions"
     assert seen[0].headers["Authorization"] == "Bearer sk-test"
@@ -109,13 +100,20 @@ async def test_request_shape():
     assert user == {"role": "user", "content": TEXT}
     assert system["role"] == "system"
     assert TEXT not in system["content"]
-    assert "Ukrainian" in system["content"]
+    assert system["content"].startswith("You are an English writing coach.")
+
+
+async def test_system_prompt_is_v3_verbatim():
+    seen: list[httpx2.Request] = []
+    await make(recording([completion(VALID)], seen)).rewrite(TEXT)
+    system = json.loads(seen[0].content)["messages"][0]["content"]
+    assert system == V3_PROMPT.read_text().rstrip("\n")
 
 
 async def test_invalid_then_valid_sends_correction_and_sums_usage():
     seen: list[httpx2.Request] = []
     replies = [completion("not json", cost="0.0001"), completion(VALID, cost="0.0002")]
-    out = await make(recording(replies, seen)).rewrite(REQ)
+    out = await make(recording(replies, seen)).rewrite(TEXT)
     retry = json.loads(seen[1].content)["messages"]
     assert len(retry) == 4
     assert retry[2] == {"role": "assistant", "content": "not json"}
@@ -132,16 +130,18 @@ async def test_invalid_then_valid_sends_correction_and_sums_usage():
     "bad",
     [
         "not json",
-        '{"source_language": "de", "output_text": "x", "changes": []}',
-        '{"source_language": "en", "output_text": "  ", "changes": []}',
-        '{"source_language": "en", "output_text": "x", "changes": [], "extra": 1}',
+        '{"source_language": "de", "output_text": "x", "explanations": []}',
+        '{"source_language": "en", "output_text": "  ", "explanations": []}',
+        '{"source_language": "en", "output_text": "x", "explanations": [" "]}',
+        '{"source_language": "en", "output_text": "x", "explanations": [], "extra": 1}',
+        '{"source_language": "en", "output_text": "x", "changes": []}',
         None,
         "",
     ],
 )
 async def test_invalid_twice_fails(bad):
     with pytest.raises(RewriteFailed) as e:
-        await make(lambda _: completion(bad)).rewrite(REQ)
+        await make(lambda _: completion(bad)).rewrite(TEXT)
     assert e.value.reason == "invalid_output"
 
 
@@ -159,32 +159,32 @@ async def test_invalid_twice_fails(bad):
 )
 async def test_transport_and_envelope_failures(handler, reason):
     with pytest.raises(RewriteFailed) as e:
-        await make(handler).rewrite(REQ)
+        await make(handler).rewrite(TEXT)
     assert e.value.reason == reason
 
 
 async def test_model_falls_back_to_body_without_upstream_header():
     response = completion(VALID)
     del response.headers["x-litellm-model-name"]
-    out = await make(lambda _: response).rewrite(REQ)
+    out = await make(lambda _: response).rewrite(TEXT)
     assert out.usage.model == "engleks-rewrite"
 
 
 async def test_missing_cost_header_gives_none():
-    out = await make(lambda _: completion(VALID, cost=None)).rewrite(REQ)
+    out = await make(lambda _: completion(VALID, cost=None)).rewrite(TEXT)
     assert out.usage.cost is None
 
 
 async def test_unknown_cost_on_one_attempt_makes_total_unknown():
     replies = [completion("not json", cost=None), completion(VALID, cost="0.0002")]
-    out = await make(recording(replies, [])).rewrite(REQ)
+    out = await make(recording(replies, [])).rewrite(TEXT)
     assert out.usage.cost is None
 
 
 async def test_logs_each_attempt_without_text():
     replies = [completion("not json"), completion(VALID)]
     with structlog.testing.capture_logs() as logs:
-        await make(recording(replies, [])).rewrite(REQ)
+        await make(recording(replies, [])).rewrite(TEXT)
     calls = [entry for entry in logs if entry["event"] == "llm_call"]
     assert [c["attempt"] for c in calls] == [1, 2]
     assert {"model", "prompt_version", "tokens_in", "tokens_out", "cost", "duration_ms"} <= calls[

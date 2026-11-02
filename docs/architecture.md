@@ -4,8 +4,8 @@
 
 A trainer for English writing, not a translator. The MVP includes:
 
-- **Improve**: modes `minimal` (default), `natural` and `polished`. Returns a list of changes, each with a category and an explanation.
-- **Translate**: UA/RU → EN with automatic language detection, in the same LLM call as Improve.
+- **Improve**: one prompt (`process_text.v3`) corrects the text and returns up to five short lessons in English: reusable language patterns drawn from the edits, not an edit log.
+- **Translate**: UA/RU → EN with automatic language detection, in the same LLM call and with the same English lessons as Improve.
 - **Context profiles**: 2–3 per user, plus request history.
 - **Multiple users**: invite codes, usage limits and a simple admin dashboard.
 
@@ -22,7 +22,6 @@ flowchart LR
   WEB["Web (later)"] -.-> API
   API --> APP[Application: use cases]
   APP --> LLM[LLM Gateway]
-  APP --> DIFF[Diff Engine]
   APP --> REPO[Repositories]
   REPO --> PG[(PostgreSQL)]
   LLM --> PROXY["LiteLLM proxy"]
@@ -30,7 +29,7 @@ flowchart LR
   PROXY -.-> P2["Ollama (dev)"]
 ```
 
-**Bot**: receives messages, calls the API and renders the reply. Long replies are split into 4096-character messages, with inline buttons. The bot has no database and no business logic.
+**Bot**: receives messages, calls the API and renders the reply. Long replies are split into 4096-character messages. The bot has no database and no business logic.
 
 **API**: the single entry point. Layers: Transport (routes, auth, validation) → Application → Domain.
 
@@ -46,9 +45,18 @@ flowchart LR
 - Versioned prompt templates.
 - Structured output validated with Pydantic, with one retry on invalid JSON.
 
-**Diff Engine**: computes a word-level diff in code with `difflib` and matches it to the model's changes.
+**Persistence**: PostgreSQL with SQLAlchemy and Alembic. Raw LLM responses, including the lessons, are stored as JSONB.
 
-**Persistence**: PostgreSQL with SQLAlchemy and Alembic. Raw LLM responses are stored as JSONB.
+The migration history was reset before release to a single `0001`. A local database still at an
+older revision fails `make migrate` with "Can't locate revision". Recreate only the API's database,
+then migrate. Do not use `docker compose down -v`: it also wipes the LiteLLM database (its keys) and
+the Ollama models.
+
+```bash
+docker compose exec postgres psql -U engleks -d postgres \
+  -c 'DROP DATABASE engleks WITH (FORCE)' -c 'CREATE DATABASE engleks'
+make migrate
+```
 
 **Admin UI**: server-rendered pages (Jinja2 + htmx, or SQLAdmin) mounted at `/admin` inside the API.
 
@@ -60,15 +68,14 @@ sequenceDiagram
   participant A as API
   participant L as LLM Gateway
   participant D as PostgreSQL
-  B->>A: POST /v1/texts/process {text, mode, profile_id}
+  B->>A: POST /v1/texts/process {text}
   A->>D: auth: identity → user, status, limits
   A->>D: rate limit + daily budget check
   A->>A: detect language, build prompt
   A->>L: generate(schema)
-  L-->>A: JSON {source_language, output_text, changes[]}
-  A->>A: compute diff
-  A->>D: save interaction, corrections; usage_daily += tokens
-  A-->>B: ProcessTextResponse {interaction_id, source_language, mode, output_text, changes[]}
+  L-->>A: JSON {source_language, output_text, explanations[]}
+  A->>D: save interaction; usage_daily += tokens
+  A-->>B: ProcessTextResponse {interaction_id, source_language, output_text, explanations[]}
 ```
 
 Errors:
@@ -102,23 +109,20 @@ Errors:
 
 | Table | Purpose |
 | --- | --- |
-| `app_user` | status (active/disabled), `limits_override`, settings (explanation language, default mode). Not `user`: reserved in Postgres |
+| `app_user` | status (active/disabled), `limits_override`. Not `user`: reserved in Postgres |
 | `identity` | provider (telegram, later web), `external_id` → `app_user` |
 | `invite_code` | code, `created_by`, `max_uses`, `used_count`, `expires_at`, revoked |
 | `context_profile` | audience, tone, channel, glossary |
-| `interaction` | input, mode, language, full JSON response, model, prompt version, tokens, cost |
-| `correction` | original, replacement, category, explanation, span → interaction |
+| `interaction` | input, source language, output, full JSON response (with the lessons), model, prompt version, tokens, cost |
 | `usage_daily` | `user_id`, date, requests, `tokens_in`, `tokens_out`, cost |
-
-Correction categories: `grammar`, `articles`, `spelling`, `punctuation`, `word_choice`, `word_order`, `style`, and `other` for an edit the model did not explain.
 
 ## 8. API (draft)
 
 - `POST /v1/auth/redeem`
-- `POST /v1/texts/process`
+- `POST /v1/texts/process`: request `{text}` (1–4096 characters, not blank); response
+  `{interaction_id, source_language, output_text, explanations}`, where `explanations` are the lessons
 - `GET/POST/PATCH /v1/profiles`
 - `GET /v1/history`
-- `GET/PATCH /v1/me/settings`
 - `/admin/*`: server-rendered pages
 
 ## 9. Deployment

@@ -19,5 +19,6 @@ class Settings(BaseSettings):
     telegram_token: SecretStr
     service_token: SecretStr
     api_base_url: str = "http://localhost:8000"
+    process_timeout_s: float = 130
     log_format: Literal["json", "console"] = "json"
     log_level: str = "INFO"

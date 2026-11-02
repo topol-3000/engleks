@@ -1,47 +1,21 @@
 import uuid
 
-import structlog
-
-from engleks_api.domain.diff import diff, reconcile
 from engleks_api.domain.ports import InteractionRepository, TextRewriter
-from engleks_api.domain.text_processing import (
-    AuthContext,
-    Change,
-    Interaction,
-    Language,
-    ProcessedText,
-    RewriteRequest,
-)
-
-log = structlog.stdlib.get_logger()
+from engleks_api.domain.text_processing import AuthContext, Interaction, ProcessedText
 
 
 async def process_text(
     auth: AuthContext,
-    request: RewriteRequest,
+    text: str,
     rewriter: TextRewriter,
     interactions: InteractionRepository,
 ) -> ProcessedText:
-    outcome = await rewriter.rewrite(request)
-    if outcome.source_language is Language.EN:
-        hunks = diff(request.text, outcome.output_text)
-        result = reconcile(hunks, outcome.changes)
-        log.info(
-            "diff_reconciled",
-            hunks=len(hunks),
-            matched=result.matched,
-            unexplained=result.unexplained,
-            dropped=result.dropped,
-        )
-        changes = result.changes
-    else:
-        # A translation shares no text with the input to align against.
-        changes = [
-            Change(c.original, c.replacement, c.category, c.explanation, span=None)
-            for c in outcome.changes
-        ]
+    outcome = await rewriter.rewrite(text)
     interaction_id = uuid.uuid7()
-    await interactions.add(Interaction(interaction_id, auth.user_id, request, outcome, changes))
+    await interactions.add(Interaction(interaction_id, auth.user_id, text, outcome))
     return ProcessedText(
-        interaction_id, outcome.source_language, request.mode, outcome.output_text, changes
+        interaction_id,
+        outcome.source_language,
+        outcome.output_text,
+        outcome.explanations,
     )

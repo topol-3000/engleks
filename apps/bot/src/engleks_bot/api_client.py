@@ -4,7 +4,13 @@ from typing import Self
 import httpx2
 from pydantic import BaseModel, ValidationError
 
-from engleks_contracts import ErrorCode, ErrorResponse, HealthResponse
+from engleks_contracts import (
+    ErrorCode,
+    ErrorResponse,
+    HealthResponse,
+    ProcessTextRequest,
+    ProcessTextResponse,
+)
 
 
 class ApiError(Exception):
@@ -25,7 +31,9 @@ class ApiClient:
         *,
         transport: httpx2.AsyncBaseTransport | None = None,
         timeout: float = 10.0,
+        process_timeout: float = 130.0,
     ) -> None:
+        self._process_timeout = process_timeout
         self._http = httpx2.AsyncClient(
             base_url=base_url,
             headers={"X-Bot-Token": service_token},
@@ -36,9 +44,36 @@ class ApiClient:
     async def health(self) -> HealthResponse:
         return await self._request("GET", "/healthz", HealthResponse)
 
-    async def _request[T: BaseModel](self, method: str, path: str, model: type[T]) -> T:
+    async def process_text(
+        self, telegram_user_id: int, request: ProcessTextRequest
+    ) -> ProcessTextResponse:
+        return await self._request(
+            "POST",
+            "/v1/texts/process",
+            ProcessTextResponse,
+            json=request.model_dump(mode="json"),
+            headers={"X-Telegram-User-Id": str(telegram_user_id)},
+            timeout=self._process_timeout,
+        )
+
+    async def _request[T: BaseModel](
+        self,
+        method: str,
+        path: str,
+        model: type[T],
+        *,
+        json: object | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,  # noqa: ASYNC109 - passed to httpx2, not an asyncio timeout
+    ) -> T:
         try:
-            response = await self._http.request(method, path)
+            response = await self._http.request(
+                method,
+                path,
+                json=json,
+                headers=headers,
+                timeout=httpx2.USE_CLIENT_DEFAULT if timeout is None else timeout,
+            )
         except httpx2.HTTPError as exc:
             raise ApiError(None, None) from exc
         if not response.is_success:

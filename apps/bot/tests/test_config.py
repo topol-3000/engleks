@@ -12,3 +12,10 @@ def test_missing_telegram_token_fails(monkeypatch):
     monkeypatch.setenv("BOT_SERVICE_TOKEN", "tok")
     with pytest.raises(ValidationError, match="telegram_token"):
         Settings(_env_file=None)
+
+
+def test_process_timeout_default(monkeypatch):
+    monkeypatch.setenv("BOT_TELEGRAM_TOKEN", "t")
+    monkeypatch.setenv("BOT_SERVICE_TOKEN", "tok")
+    monkeypatch.delenv("BOT_PROCESS_TIMEOUT_S", raising=False)
+    assert Settings(_env_file=None).process_timeout_s == 130

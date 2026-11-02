@@ -5,27 +5,10 @@ from enum import StrEnum
 from uuid import UUID
 
 
-class Mode(StrEnum):
-    MINIMAL = "minimal"
-    NATURAL = "natural"
-    POLISHED = "polished"
-
-
 class Language(StrEnum):
     EN = "en"
     UK = "uk"
     RU = "ru"
-
-
-class Category(StrEnum):
-    GRAMMAR = "grammar"
-    ARTICLES = "articles"
-    SPELLING = "spelling"
-    PUNCTUATION = "punctuation"
-    WORD_CHOICE = "word_choice"
-    WORD_ORDER = "word_order"
-    STYLE = "style"
-    OTHER = "other"
 
 
 class Provider(StrEnum):
@@ -42,49 +25,20 @@ class Usage:
 
 
 @dataclass(frozen=True)
-class ModelChange:
-    """A change as the model reports it. Untrusted until reconciled with the diff."""
-
-    original: str
-    replacement: str
-    category: Category
-    explanation: str
-
-
-@dataclass(frozen=True)
-class RewriteRequest:
-    text: str
-    mode: Mode
-    explanation_language: Language
-
-
-@dataclass(frozen=True)
 class RewriteOutcome:
     source_language: Language
     output_text: str
-    changes: list[ModelChange]
+    explanations: list[str]
     usage: Usage
     llm_response: Mapping[str, object]
-
-
-@dataclass(frozen=True)
-class Change:
-    """A reconciled change. `span` is code point offsets into the input; None for translations."""
-
-    original: str
-    replacement: str
-    category: Category
-    explanation: str | None
-    span: tuple[int, int] | None
 
 
 @dataclass(frozen=True)
 class ProcessedText:
     interaction_id: UUID
     source_language: Language
-    mode: Mode
     output_text: str
-    changes: list[Change]
+    explanations: list[str]
 
 
 @dataclass(frozen=True)
@@ -96,9 +50,8 @@ class AuthContext:
 class Interaction:
     id: UUID
     user_id: UUID
-    request: RewriteRequest
+    input_text: str
     outcome: RewriteOutcome
-    changes: list[Change]
 
 
 class RewriteFailed(Exception):

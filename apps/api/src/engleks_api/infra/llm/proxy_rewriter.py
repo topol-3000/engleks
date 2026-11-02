@@ -7,21 +7,17 @@ from jinja2 import Environment, PackageLoader, StrictUndefined
 from pydantic import BaseModel, ValidationError
 
 from engleks_api.domain.text_processing import (
-    Category,
     Language,
-    ModelChange,
     RewriteFailed,
     RewriteOutcome,
-    RewriteRequest,
     Usage,
 )
 from engleks_api.infra.llm.schema import LLMRewrite
 
 log = structlog.stdlib.get_logger()
 
-PROMPT_VERSION = "process_text.v1"
+PROMPT_VERSION = "process_text.v3"
 _TEMPERATURE = 0.2
-_LANGUAGE_NAMES = {Language.EN: "English", Language.UK: "Ukrainian", Language.RU: "Russian"}
 
 _prompts = Environment(
     loader=PackageLoader("engleks_api.infra.llm", "prompts"),
@@ -82,15 +78,12 @@ class ProxyRewriter:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def rewrite(self, request: RewriteRequest) -> RewriteOutcome:
-        system = _prompts.get_template(f"{PROMPT_VERSION}.j2").render(
-            mode=request.mode.value,
-            explanation_language=_LANGUAGE_NAMES[request.explanation_language],
-        )
+    async def rewrite(self, text: str) -> RewriteOutcome:
+        system = _prompts.get_template(f"{PROMPT_VERSION}.j2").render()
         # The user's text is only ever the user message, so it stays data.
         messages: list[dict[str, str]] = [
             {"role": "system", "content": system},
-            {"role": "user", "content": request.text},
+            {"role": "user", "content": text},
         ]
         first = await self._call(messages, attempt=1)
         attempts = [first]
@@ -124,10 +117,7 @@ class ProxyRewriter:
         return RewriteOutcome(
             source_language=Language(parsed.source_language),
             output_text=parsed.output_text,
-            changes=[
-                ModelChange(c.original, c.replacement, Category(c.category), c.explanation)
-                for c in parsed.changes
-            ],
+            explanations=parsed.explanations,
             usage=usage,
             llm_response=parsed.model_dump(mode="json"),
         )

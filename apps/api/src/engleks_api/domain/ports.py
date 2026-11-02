@@ -5,7 +5,6 @@ from engleks_api.domain.text_processing import (
     Interaction,
     Provider,
     RewriteOutcome,
-    RewriteRequest,
 )
 
 
@@ -20,7 +19,7 @@ class ReadinessProbe(Protocol):
 
 
 class TextRewriter(Protocol):
-    async def rewrite(self, request: RewriteRequest) -> RewriteOutcome:
+    async def rewrite(self, text: str) -> RewriteOutcome:
         """Improve or translate the text; raise RewriteFailed if no valid result."""
         ...
 
@@ -33,5 +32,5 @@ class IdentityRepository(Protocol):
 
 class InteractionRepository(Protocol):
     async def add(self, interaction: Interaction) -> None:
-        """Store the interaction and its changes in one transaction."""
+        """Store the interaction."""
         ...

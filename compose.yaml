@@ -8,7 +8,7 @@ x-api-env: &api-env
   API_LOG_FORMAT: json
   API_LOG_LEVEL: ${API_LOG_LEVEL:-INFO}
   API_LLM_BASE_URL: http://litellm:4000/v1
-  API_LLM_MODEL: engleks-rewrite
+  API_LLM_MODEL: ${API_LLM_MODEL:-engleks-rewrite}
 
 # migrate builds the full Settings in env.py, so it gets the same secrets as api.
 x-api-secrets: &api-secrets
@@ -97,6 +97,7 @@ services:
       - litellm_ui_username
       - litellm_ui_password
       - openai_api_key
+      - anthropic_api_key
     networks: [default, llm]
     # Admin UI at /ui: localhost only (prod: SSH tunnel).
     ports:
@@ -163,6 +164,8 @@ secrets:
     environment: LITELLM_UI_PASSWORD
   openai_api_key:
     environment: OPENAI_API_KEY
+  anthropic_api_key:
+    environment: ANTHROPIC_API_KEY
 
 networks:
   default: {}
