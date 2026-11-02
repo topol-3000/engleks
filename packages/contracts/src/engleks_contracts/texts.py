@@ -4,12 +4,6 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class Mode(StrEnum):
-    MINIMAL = "minimal"
-    NATURAL = "natural"
-    POLISHED = "polished"
-
-
 class Language(StrEnum):
     EN = "en"
     UK = "uk"
@@ -20,8 +14,6 @@ class ProcessTextRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     text: str = Field(min_length=1, max_length=4096)
-    mode: Mode = Mode.NATURAL
-    explanation_language: Language = Language.EN
 
     @field_validator("text")
     @classmethod
@@ -36,6 +28,5 @@ class ProcessTextResponse(BaseModel):
 
     interaction_id: UUID
     source_language: Language
-    mode: Mode
     output_text: str
     explanations: list[str]

@@ -10,7 +10,6 @@ from engleks_api.domain.text_processing import (
     Language,
     RewriteFailed,
     RewriteOutcome,
-    RewriteRequest,
     Usage,
 )
 from engleks_api.infra.llm.schema import LLMRewrite
@@ -79,13 +78,12 @@ class ProxyRewriter:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def rewrite(self, request: RewriteRequest) -> RewriteOutcome:
-        # v3 has one behaviour for every mode and writes explanations in English.
+    async def rewrite(self, text: str) -> RewriteOutcome:
         system = _prompts.get_template(f"{PROMPT_VERSION}.j2").render()
         # The user's text is only ever the user message, so it stays data.
         messages: list[dict[str, str]] = [
             {"role": "system", "content": system},
-            {"role": "user", "content": request.text},
+            {"role": "user", "content": text},
         ]
         first = await self._call(messages, attempt=1)
         attempts = [first]

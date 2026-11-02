@@ -8,10 +8,8 @@ from engleks_api.domain.text_processing import (
     AuthContext,
     Interaction,
     Language,
-    Mode,
     RewriteFailed,
     RewriteOutcome,
-    RewriteRequest,
     Usage,
 )
 
@@ -26,10 +24,10 @@ def outcome(lang: Language, output_text: str, explanations: list[str]) -> Rewrit
 class FakeRewriter:
     def __init__(self, result: RewriteOutcome | RewriteFailed) -> None:
         self.result = result
-        self.requests: list[RewriteRequest] = []
+        self.texts: list[str] = []
 
-    async def rewrite(self, request: RewriteRequest) -> RewriteOutcome:
-        self.requests.append(request)
+    async def rewrite(self, text: str) -> RewriteOutcome:
+        self.texts.append(text)
         if isinstance(self.result, RewriteFailed):
             raise self.result
         return self.result
@@ -47,38 +45,25 @@ async def test_returns_and_saves_the_outcome():
     out = outcome(Language.EN, "He goes home.", ["Add -s to the verb after he, she or it."])
     rewriter = FakeRewriter(out)
     repo = FakeInteractions()
-    req = RewriteRequest("He go home.", Mode.MINIMAL, Language.EN)
-    result = await process_text(AUTH, req, rewriter, repo)
-    assert (result.source_language, result.mode, result.output_text, result.explanations) == (
+    result = await process_text(AUTH, "He go home.", rewriter, repo)
+    assert (result.source_language, result.output_text, result.explanations) == (
         Language.EN,
-        Mode.MINIMAL,
         "He goes home.",
         ["Add -s to the verb after he, she or it."],
     )
-    [saved] = repo.saved
-    assert saved == Interaction(result.interaction_id, AUTH.user_id, req, out)
+    assert repo.saved == [Interaction(result.interaction_id, AUTH.user_id, "He go home.", out)]
     assert result.interaction_id.version == 7
-    assert rewriter.requests == [req]
+    assert rewriter.texts == ["He go home."]
 
 
 async def test_translation_without_lessons():
     rewriter = FakeRewriter(outcome(Language.UK, "Hi, how are you?", []))
-    result = await process_text(
-        AUTH,
-        RewriteRequest("Привіт, як справи?", Mode.NATURAL, Language.UK),
-        rewriter,
-        FakeInteractions(),
-    )
+    result = await process_text(AUTH, "Привіт, як справи?", rewriter, FakeInteractions())
     assert (result.source_language, result.explanations) == (Language.UK, [])
 
 
 async def test_failure_saves_nothing():
     repo = FakeInteractions()
     with pytest.raises(RewriteFailed):
-        await process_text(
-            AUTH,
-            RewriteRequest("x", Mode.MINIMAL, Language.EN),
-            FakeRewriter(RewriteFailed("timeout")),
-            repo,
-        )
+        await process_text(AUTH, "x", FakeRewriter(RewriteFailed("timeout")), repo)
     assert repo.saved == []

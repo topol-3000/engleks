@@ -4,14 +4,13 @@ import pytest
 
 from engleks_bot.rendering.reply import render_reply
 from engleks_bot.rendering.split import split_message, utf16_len
-from engleks_contracts import Language, Mode, ProcessTextResponse
+from engleks_contracts import Language, ProcessTextResponse
 
 
 def response(explanations, *, output="I went.", lang=Language.EN):
     return ProcessTextResponse(
         interaction_id=UUID(int=1),
         source_language=lang,
-        mode=Mode.NATURAL,
         output_text=output,
         explanations=explanations,
     )

@@ -5,12 +5,6 @@ from enum import StrEnum
 from uuid import UUID
 
 
-class Mode(StrEnum):
-    MINIMAL = "minimal"
-    NATURAL = "natural"
-    POLISHED = "polished"
-
-
 class Language(StrEnum):
     EN = "en"
     UK = "uk"
@@ -31,13 +25,6 @@ class Usage:
 
 
 @dataclass(frozen=True)
-class RewriteRequest:
-    text: str
-    mode: Mode
-    explanation_language: Language
-
-
-@dataclass(frozen=True)
 class RewriteOutcome:
     source_language: Language
     output_text: str
@@ -50,7 +37,6 @@ class RewriteOutcome:
 class ProcessedText:
     interaction_id: UUID
     source_language: Language
-    mode: Mode
     output_text: str
     explanations: list[str]
 
@@ -64,7 +50,7 @@ class AuthContext:
 class Interaction:
     id: UUID
     user_id: UUID
-    request: RewriteRequest
+    input_text: str
     outcome: RewriteOutcome
 
 

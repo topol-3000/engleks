@@ -12,7 +12,6 @@ from engleks_contracts import (
     HealthResponse,
     HealthStatus,
     Language,
-    Mode,
     ProcessTextRequest,
     ProcessTextResponse,
 )
@@ -84,7 +83,6 @@ def ok_response() -> ProcessTextResponse:
     return ProcessTextResponse(
         interaction_id=UUID(int=1),
         source_language=Language.EN,
-        mode=Mode.NATURAL,
         output_text="I went.",
         explanations=[],
     )
@@ -98,16 +96,12 @@ async def test_process_text_request_and_response():
         return httpx2.Response(200, json=ok_response().model_dump(mode="json"))
 
     async with client_for(handler) as c:
-        got = await c.process_text(42, ProcessTextRequest(text="I has went.", mode=Mode.NATURAL))
+        got = await c.process_text(42, ProcessTextRequest(text="I has went."))
     assert got == ok_response()
     r = seen[-1]
     assert (r.method, r.url.path) == ("POST", "/v1/texts/process")
     assert (r.headers["X-Bot-Token"], r.headers["X-Telegram-User-Id"]) == ("tok", "42")
-    assert json.loads(r.content) == {
-        "text": "I has went.",
-        "mode": "natural",
-        "explanation_language": "en",
-    }
+    assert json.loads(r.content) == {"text": "I has went."}
 
 
 @pytest.mark.parametrize(

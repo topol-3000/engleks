@@ -52,20 +52,14 @@ class SqlInteractionRepository:
         self._sessions = sessions
 
     async def add(self, interaction: Interaction) -> None:
-        request, outcome, usage = (
-            interaction.request,
-            interaction.outcome,
-            interaction.outcome.usage,
-        )
+        outcome, usage = interaction.outcome, interaction.outcome.usage
         async with self._sessions.begin() as session:
             session.add(
                 InteractionRow(
                     id=interaction.id,
                     user_id=interaction.user_id,
-                    mode=request.mode.value,
                     source_language=outcome.source_language.value,
-                    explanation_language=request.explanation_language.value,
-                    input_text=request.text,
+                    input_text=interaction.input_text,
                     output_text=outcome.output_text,
                     llm_response=dict(outcome.llm_response),
                     model=usage.model,

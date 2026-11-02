@@ -19,16 +19,15 @@ from engleks_bot.rendering.errors import (
     TOO_LONG,
     UNAVAILABLE,
 )
-from engleks_contracts import Language, Mode, ProcessTextResponse
+from engleks_contracts import Language, ProcessTextResponse
 
 USER = User(id=1, is_bot=False, first_name="U")
 
 
-def ok(*, output="I went.", mode=Mode.NATURAL, explanations=()) -> ProcessTextResponse:
+def ok(*, output="I went.", explanations=()) -> ProcessTextResponse:
     return ProcessTextResponse(
         interaction_id=UUID(int=1),
         source_language=Language.EN,
-        mode=mode,
         output_text=output,
         explanations=list(explanations),
     )
@@ -48,11 +47,7 @@ async def test_request_and_reply(make_message, make_api, bot, sent):
         )
 
     await on_text(make_message("I has went."), USER, make_api(handler), bot)
-    assert json.loads(seen[0].content) == {
-        "text": "I has went.",
-        "mode": "natural",
-        "explanation_language": "en",
-    }
+    assert json.loads(seen[0].content) == {"text": "I has went."}
     assert seen[0].headers["X-Telegram-User-Id"] == "1"
     [msg] = sent()
     assert msg.reply_parameters.message_id == 10

@@ -12,7 +12,7 @@ from aiogram.types import Update
 from engleks_bot.handlers.start import HELP_TEXT
 from engleks_bot.main import build_dispatcher
 from engleks_bot.rendering.errors import SEND_TEXT
-from engleks_contracts import Language, Mode, ProcessTextResponse
+from engleks_contracts import Language, ProcessTextResponse
 
 USER = {"id": 1, "is_bot": False, "first_name": "User"}
 BOT_USER = {"id": 42, "is_bot": True, "first_name": "Engleks"}
@@ -47,7 +47,6 @@ def dispatcher(make_api, api_calls):
         body = ProcessTextResponse(
             interaction_id=UUID(int=1),
             source_language=Language.EN,
-            mode=Mode.NATURAL,
             output_text="I went.",
             explanations=[],
         )

@@ -3,18 +3,26 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
+import engleks_contracts
 from engleks_contracts import (
     ErrorCode,
     Language,
-    Mode,
     ProcessTextRequest,
     ProcessTextResponse,
 )
 
 
-def test_request_defaults():
-    r = ProcessTextRequest(text="hi")
-    assert (r.mode, r.explanation_language) == (Mode.NATURAL, Language.EN)
+def test_request_is_only_text():
+    assert ProcessTextRequest(text="hi").model_dump() == {"text": "hi"}
+
+
+def test_request_ignores_unknown_fields():
+    body = {"text": "hi", "mode": "minimal", "explanation_language": "uk"}
+    assert ProcessTextRequest.model_validate(body).model_dump() == {"text": "hi"}
+
+
+def test_mode_is_gone():
+    assert "Mode" not in engleks_contracts.__all__
 
 
 @pytest.mark.parametrize("text", ["", " ", "\n\t "])
@@ -37,11 +45,11 @@ def test_response_round_trip():
     resp = ProcessTextResponse(
         interaction_id=UUID(int=1),
         source_language=Language.EN,
-        mode=Mode.NATURAL,
         output_text="Hi, John.",
         explanations=["Use a comma after a greeting: 'Hi, John.'"],
     )
     body = resp.model_dump(mode="json")
+    assert set(body) == {"interaction_id", "source_language", "output_text", "explanations"}
     assert body["explanations"] == ["Use a comma after a greeting: 'Hi, John.'"]
     assert ProcessTextResponse.model_validate(body) == resp
 

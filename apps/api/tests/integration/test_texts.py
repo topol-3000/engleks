@@ -9,12 +9,11 @@ from engleks_api.domain.text_processing import (
     Language,
     RewriteFailed,
     RewriteOutcome,
-    RewriteRequest,
     Usage,
 )
 from engleks_api.main import create_app
 from engleks_api.transport.texts import text_rewriter
-from engleks_contracts import Mode, ProcessTextResponse
+from engleks_contracts import ProcessTextResponse
 
 URL = "/v1/texts/process"
 UNAUTHORIZED = {"code": "unauthorized", "message": "Unauthorized"}
@@ -30,10 +29,10 @@ class FakeRewriter:
             llm_response={"source_language": "en"},
         )
         self.fail_with: RewriteFailed | None = None
-        self.requests: list[RewriteRequest] = []
+        self.texts: list[str] = []
 
-    async def rewrite(self, request: RewriteRequest) -> RewriteOutcome:
-        self.requests.append(request)
+    async def rewrite(self, text: str) -> RewriteOutcome:
+        self.texts.append(text)
         if self.fail_with is not None:
             raise self.fail_with
         return self.outcome
@@ -74,7 +73,7 @@ async def test_missing_token_401(api):
     client, fake = api
     r = await client.post(URL, json={"text": "hi"}, headers=headers(token=None))
     assert (r.status_code, r.json()) == (401, UNAUTHORIZED)
-    assert fake.requests == []
+    assert fake.texts == []
 
 
 @pytest.mark.parametrize("token", ["wrong", ""])
@@ -84,7 +83,7 @@ async def test_wrong_token_401(api, token):
         URL, json={"text": "hi"}, headers={"X-Telegram-User-Id": "4242", "X-Bot-Token": token}
     )
     assert (r.status_code, r.json()) == (401, UNAUTHORIZED)
-    assert fake.requests == []
+    assert fake.texts == []
 
 
 async def test_non_ascii_token_bytes_401(api):
@@ -99,7 +98,7 @@ async def test_bad_user_id_401(api, engine, user_id):
     client, fake = api
     r = await client.post(URL, json={"text": "hi"}, headers=headers(user_id))
     assert (r.status_code, r.json()) == (401, UNAUTHORIZED)
-    assert fake.requests == []
+    assert fake.texts == []
     async with engine.connect() as c:
         stored = await c.scalar(
             text("SELECT count(*) FROM identity WHERE external_id = :e"), {"e": user_id or ""}
@@ -126,17 +125,22 @@ async def test_llm_failure_502_saves_nothing(api, engine):
 
 async def test_success_returns_explanations_and_saves_interaction(api, engine):
     client, fake = api
-    r = await client.post(
-        URL,
-        json={"text": "He go home.", "mode": "natural", "explanation_language": "uk"},
-        headers=headers("6161"),
-    )
+    r = await client.post(URL, json={"text": "He go home."}, headers=headers("6161"))
     assert r.status_code == 200
+    assert "mode" not in r.json()
     body = ProcessTextResponse.model_validate(r.json())
-    assert (body.mode, body.output_text) == (Mode.NATURAL, "He goes home.")
+    assert body.output_text == "He goes home."
     assert body.explanations == ["Add -s to the verb after he, she or it."]
-    assert fake.requests[0].explanation_language is Language.UK
+    assert fake.texts == ["He go home."]
     assert await count_interactions(engine, "6161") == 1
+
+
+async def test_old_client_fields_are_ignored(api):
+    client, fake = api
+    body = {"text": "He go home.", "mode": "minimal", "explanation_language": "uk"}
+    r = await client.post(URL, json=body, headers=headers("8181"))
+    assert r.status_code == 200
+    assert fake.texts == ["He go home."]
 
 
 async def test_same_user_twice_reuses_identity(api, engine):

@@ -49,9 +49,7 @@ class InteractionRow(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    mode: Mapped[str] = mapped_column(Text)
     source_language: Mapped[str] = mapped_column(Text)
-    explanation_language: Mapped[str] = mapped_column(Text)
     input_text: Mapped[str] = mapped_column(Text)
     output_text: Mapped[str] = mapped_column(Text)
     llm_response: Mapped[dict[str, object]] = mapped_column(JSONB)
@@ -60,21 +58,3 @@ class InteractionRow(Base):
     tokens_in: Mapped[int] = mapped_column(Integer)
     tokens_out: Mapped[int] = mapped_column(Integer)
     cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 8))
-
-
-class CorrectionRow(Base):
-    """Not written since process_text.v3, which returns lessons instead of changes."""
-
-    __tablename__ = "correction"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
-    interaction_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("interaction.id", ondelete="CASCADE"), index=True
-    )
-    position: Mapped[int] = mapped_column(Integer)
-    original: Mapped[str] = mapped_column(Text)
-    replacement: Mapped[str] = mapped_column(Text)
-    category: Mapped[str] = mapped_column(Text)
-    explanation: Mapped[str | None] = mapped_column(Text)
-    span_start: Mapped[int | None] = mapped_column(Integer)
-    span_end: Mapped[int | None] = mapped_column(Integer)

@@ -2,24 +2,21 @@ import asyncio
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import func, select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from engleks_api.domain.text_processing import (
     Interaction,
     Language,
-    Mode,
     Provider,
     RewriteOutcome,
-    RewriteRequest,
     Usage,
 )
-from engleks_api.infra.db.models import CorrectionRow, InteractionRow
+from engleks_api.infra.db.models import InteractionRow
 from engleks_api.infra.db.repositories import SqlIdentityRepository, SqlInteractionRepository
 
 
 def interaction(user_id: uuid.UUID) -> Interaction:
-    request = RewriteRequest("He go home, no?", Mode.NATURAL, Language.UK)
     outcome = RewriteOutcome(
         source_language=Language.EN,
         output_text="He goes home, right?",
@@ -31,7 +28,7 @@ def interaction(user_id: uuid.UUID) -> Interaction:
             "explanations": ["Add -s to the verb after he, she or it."],
         },
     )
-    return Interaction(uuid.uuid7(), user_id, request, outcome)
+    return Interaction(uuid.uuid7(), user_id, "He go home, no?", outcome)
 
 
 async def test_get_or_create_is_stable(sessions):
@@ -62,11 +59,6 @@ async def test_interaction_round_trip(sessions):
     await SqlInteractionRepository(sessions).add(it)
     async with sessions() as s:
         row = await s.get(InteractionRow, it.id)
-        corrections = await s.scalar(
-            select(func.count())
-            .select_from(CorrectionRow)
-            .where(CorrectionRow.interaction_id == it.id)
-        )
     assert row is not None
     assert (row.user_id, row.cost, row.prompt_version, row.model) == (
         user_id,
@@ -74,7 +66,7 @@ async def test_interaction_round_trip(sessions):
         "process_text.v3",
         "ollama/qwen",
     )
-    assert (row.mode, row.source_language, row.explanation_language) == ("natural", "en", "uk")
+    assert row.source_language == "en"
     assert (row.input_text, row.output_text, row.tokens_in, row.tokens_out) == (
         "He go home, no?",
         "He goes home, right?",
@@ -82,5 +74,3 @@ async def test_interaction_round_trip(sessions):
         45,
     )
     assert row.llm_response == it.outcome.llm_response
-    # Lessons live in llm_response; the correction table is no longer written.
-    assert corrections == 0
