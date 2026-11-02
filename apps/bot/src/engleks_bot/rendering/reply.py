@@ -9,11 +9,10 @@ _LANGUAGE_NAMES = {Language.UK: "Ukrainian", Language.RU: "Russian"}
 
 
 def _header(response: ProcessTextResponse) -> Node | None:
-    mode = response.mode.value
     if response.source_language is not Language.EN:
-        return Bold(f"Translated from {_LANGUAGE_NAMES[response.source_language]} · {mode}")
+        return Bold(f"Translated from {_LANGUAGE_NAMES[response.source_language]}")
     if response.explanations:
-        return Bold(f"Lessons · {mode}")
+        return Bold("Lessons")
     # An empty list does not mean the text is unchanged: minor fixes go unexplained.
     return None
 

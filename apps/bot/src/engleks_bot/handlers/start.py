@@ -7,9 +7,7 @@ HELP_TEXT = (
     "Hi! I'm Engleks, your English writing trainer.\n\n"
     "Send me a message in English and I'll correct it, or write in Ukrainian or Russian "
     "and I'll translate it into English. You'll also get short lessons on the patterns "
-    "behind the edits.\n\n"
-    "Replies start in natural mode, which also smooths the phrasing. Tap Minimal or Polished "
-    "under a reply to rewrite the same text in that mode."
+    "behind the edits."
 )
 
 

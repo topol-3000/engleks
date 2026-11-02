@@ -8,9 +8,8 @@ from engleks_bot.rendering.errors import (
     NO_ACCESS,
     UNAVAILABLE,
     error_text,
-    rewriting,
 )
-from engleks_contracts import ErrorCode, Mode
+from engleks_contracts import ErrorCode
 
 
 @pytest.mark.parametrize(
@@ -27,7 +26,3 @@ from engleks_contracts import ErrorCode, Mode
 )
 def test_error_text(error, text):
     assert error_text(error) == text
-
-
-def test_rewriting():
-    assert rewriting(Mode.NATURAL) == "Rewriting in natural…"

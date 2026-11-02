@@ -8,7 +8,7 @@ import pytest
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import SendMessage, TelegramMethod
-from aiogram.types import InlineKeyboardMarkup, Message
+from aiogram.types import Message
 
 from engleks_bot.api_client import ApiClient
 
@@ -77,28 +77,17 @@ def make_message(bot: Bot) -> Callable[..., Message]:
         *,
         message_id: int = 10,
         chat_type: str = "private",
-        from_bot: bool = False,
-        reply_to: Message | None = None,
-        reply_markup: InlineKeyboardMarkup | None = None,
         **extra: Any,
     ) -> Message:
         data: dict[str, Any] = {
             "message_id": message_id,
             "date": datetime.now(UTC),
             "chat": {"id": 1, "type": chat_type},
-            "from_user": (
-                {"id": 42, "is_bot": True, "first_name": "Engleks"}
-                if from_bot
-                else {"id": 1, "is_bot": False, "first_name": "User"}
-            ),
+            "from_user": {"id": 1, "is_bot": False, "first_name": "User"},
             **extra,
         }
         if text is not None:
             data["text"] = text
-        if reply_to is not None:
-            data["reply_to_message"] = reply_to.model_dump(by_alias=True, exclude_none=True)
-        if reply_markup is not None:
-            data["reply_markup"] = reply_markup.model_dump(exclude_none=True)
         return Message.model_validate(data, context={"bot": bot})
 
     return make

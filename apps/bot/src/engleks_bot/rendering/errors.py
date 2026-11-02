@@ -1,5 +1,5 @@
 from engleks_bot.api_client import ApiError
-from engleks_contracts import ErrorCode, Mode
+from engleks_contracts import ErrorCode
 
 MAX_INPUT_CHARS = 1000
 
@@ -10,13 +10,6 @@ TOO_LONG = f"This text is too long. Please send up to {MAX_INPUT_CHARS} characte
 LLM_DOWN = "The language model didn't respond. Please try again."
 GENERIC = "Something went wrong. Please try again."
 SEND_TEXT = "Send me text and I'll correct it."
-ALREADY_WORKING = "Already working on it"
-ORIGINAL_GONE = "The original message is gone. Send the text again."
-TOO_OLD = "This message is too old. Send the text again."
-
-
-def rewriting(mode: Mode) -> str:
-    return f"Rewriting in {mode.value}…"
 
 
 def error_text(error: ApiError) -> str:

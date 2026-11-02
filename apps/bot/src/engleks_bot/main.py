@@ -6,7 +6,7 @@ from aiogram.enums import ChatType
 
 from engleks_bot.api_client import ApiClient, ApiError
 from engleks_bot.config import Settings
-from engleks_bot.handlers import errors, rerun, start, texts
+from engleks_bot.handlers import errors, start, texts
 from engleks_bot.logging_setup import configure_logging
 
 log = structlog.stdlib.get_logger()
@@ -25,12 +25,9 @@ async def check_api(client: ApiClient) -> None:
 def build_dispatcher(api: ApiClient) -> Dispatcher:
     dispatcher = Dispatcher()
     dispatcher["api"] = api
-    dispatcher["in_flight"] = set()
     dispatcher.message.filter(F.chat.type == ChatType.PRIVATE)
-    dispatcher.callback_query.filter(F.message.chat.type == ChatType.PRIVATE)
     dispatcher.include_router(start.build_router())
     dispatcher.include_router(texts.build_router())
-    dispatcher.include_router(rerun.build_router())
     dispatcher.errors.register(errors.on_error)
     return dispatcher
 
