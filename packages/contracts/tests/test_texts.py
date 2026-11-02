@@ -4,8 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from engleks_contracts import (
-    Category,
-    ChangeItem,
     ErrorCode,
     Language,
     Mode,
@@ -41,34 +39,10 @@ def test_response_round_trip():
         source_language=Language.EN,
         mode=Mode.NATURAL,
         output_text="Hi, John.",
-        changes=[
-            ChangeItem(
-                original="",
-                replacement=",",
-                category=Category.PUNCTUATION,
-                explanation="Comma after a greeting.",
-                start=2,
-                end=2,
-            ),
-            ChangeItem(
-                original="john",
-                replacement="John",
-                category=Category.OTHER,
-                explanation=None,
-                start=None,
-                end=None,
-            ),
-        ],
+        explanations=["Use a comma after a greeting: 'Hi, John.'"],
     )
     body = resp.model_dump(mode="json")
-    assert body["changes"][0] == {
-        "original": "",
-        "replacement": ",",
-        "category": "punctuation",
-        "explanation": "Comma after a greeting.",
-        "start": 2,
-        "end": 2,
-    }
+    assert body["explanations"] == ["Use a comma after a greeting: 'Hi, John.'"]
     assert ProcessTextResponse.model_validate(body) == resp
 
 

@@ -1,38 +1,21 @@
-from aiogram.utils.formatting import Bold, Strikethrough, Text
+from aiogram.utils.formatting import Bold, Text
 
 from engleks_bot.rendering.split import TELEGRAM_LIMIT, split_message, utf16_len
-from engleks_contracts import ChangeItem, Language, ProcessTextResponse
+from engleks_contracts import Language, ProcessTextResponse
 
-type Node = str | Bold | Strikethrough
+type Node = str | Bold
 
 _LANGUAGE_NAMES = {Language.UK: "Ukrainian", Language.RU: "Russian"}
 
 
-def _header(response: ProcessTextResponse) -> Node:
+def _header(response: ProcessTextResponse) -> Node | None:
     mode = response.mode.value
     if response.source_language is not Language.EN:
         return Bold(f"Translated from {_LANGUAGE_NAMES[response.source_language]} · {mode}")
-    if response.changes:
-        return Bold(f"Changes · {mode}")
-    return Bold(f"No changes needed · {mode}")
-
-
-def _item(n: int, change: ChangeItem, *, translation: bool) -> list[Node]:
-    label = change.category.value.replace("_", " ")
-    nodes: list[Node]
-    if not change.original:
-        nodes = [f"{n}. + {change.replacement} · {label}"]
-    else:
-        original: Node = change.original if translation else Strikethrough(change.original)
-        tail = (
-            f" removed · {label}"
-            if not change.replacement
-            else f" → {change.replacement} · {label}"
-        )
-        nodes = [f"{n}. ", original, tail]
-    if change.explanation is not None:
-        nodes.append(f"\n   {change.explanation}")
-    return nodes
+    if response.explanations:
+        return Bold(f"Lessons · {mode}")
+    # An empty list does not mean the text is unchanged: minor fixes go unexplained.
+    return None
 
 
 def _plain(nodes: list[Node]) -> str:
@@ -40,12 +23,12 @@ def _plain(nodes: list[Node]) -> str:
 
 
 def render_reply(response: ProcessTextResponse) -> list[Text]:
-    """Lay out output, header and change items, packed into messages within the Telegram limit."""
-    translation = response.source_language is not Language.EN
+    """Lay out output, header and lessons, packed into messages within the Telegram limit."""
+    header = _header(response)
     blocks: list[tuple[str, list[Node]]] = [
         ("", [response.output_text]),
-        ("\n\n", [_header(response)]),
-        *(("\n", _item(n, c, translation=translation)) for n, c in enumerate(response.changes, 1)),
+        *([("\n\n", [header])] if header is not None else []),
+        *(("\n", [f"{n}. {e}"]) for n, e in enumerate(response.explanations, 1)),
     ]
     messages: list[Text] = []
     current: list[Node] = []

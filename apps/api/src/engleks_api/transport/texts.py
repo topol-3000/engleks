@@ -6,13 +6,7 @@ from engleks_api.application.process_text import process_text
 from engleks_api.domain.ports import InteractionRepository, TextRewriter
 from engleks_api.domain.text_processing import AuthContext, Language, Mode, RewriteRequest
 from engleks_api.transport.auth import auth_context
-from engleks_contracts import (
-    Category,
-    ChangeItem,
-    ErrorResponse,
-    ProcessTextRequest,
-    ProcessTextResponse,
-)
+from engleks_contracts import ErrorResponse, ProcessTextRequest, ProcessTextResponse
 from engleks_contracts import Language as WireLanguage
 from engleks_contracts import Mode as WireMode
 
@@ -52,15 +46,5 @@ async def process(
         source_language=WireLanguage(result.source_language.value),
         mode=WireMode(result.mode.value),
         output_text=result.output_text,
-        changes=[
-            ChangeItem(
-                original=c.original,
-                replacement=c.replacement,
-                category=Category(c.category.value),
-                explanation=c.explanation,
-                start=c.span[0] if c.span else None,
-                end=c.span[1] if c.span else None,
-            )
-            for c in result.changes
-        ],
+        explanations=result.explanations,
     )

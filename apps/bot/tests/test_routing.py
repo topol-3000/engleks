@@ -50,7 +50,7 @@ def dispatcher(make_api, api_calls):
             source_language=Language.EN,
             mode=Mode.NATURAL,
             output_text="I went.",
-            changes=[],
+            explanations=[],
         )
         return httpx2.Response(200, json=body.model_dump(mode="json"))
 

@@ -33,5 +33,5 @@ class IdentityRepository(Protocol):
 
 class InteractionRepository(Protocol):
     async def add(self, interaction: Interaction) -> None:
-        """Store the interaction and its changes in one transaction."""
+        """Store the interaction."""
         ...

@@ -12,25 +12,16 @@ def _not_blank(value: str) -> str:
     return value
 
 
-class LLMChange(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    original: str
-    replacement: str
-    # No "other": reconciliation assigns it to edits the model did not explain.
-    category: Literal[
-        "grammar", "articles", "spelling", "punctuation", "word_choice", "word_order", "style"
-    ]
-    explanation: str
-
-    _explanation_not_blank = field_validator("explanation")(_not_blank)
-
-
 class LLMRewrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source_language: Literal["en", "uk", "ru"]
     output_text: str
-    changes: list[LLMChange]
+    explanations: list[str]
 
     _output_not_blank = field_validator("output_text")(_not_blank)
+
+    @field_validator("explanations")
+    @classmethod
+    def _explanations_not_blank(cls, explanations: list[str]) -> list[str]:
+        return [_not_blank(e) for e in explanations]

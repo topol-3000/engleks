@@ -1,8 +1,8 @@
 # AGENTS.md: engleks
 
 A trainer for English writing, not a translator. Users send text to a Telegram bot; the API
-improves it (modes `minimal`, `natural`, `polished`) or translates it from UA/RU, and explains
-every change. Context profiles, history, invite codes, usage limits and an admin dashboard
+improves it (modes `minimal`, `natural`, `polished`) or translates it from UA/RU, and teaches
+short lessons drawn from the edits. Context profiles, history, invite codes, usage limits and an admin dashboard
 complete the MVP.
 
 This file is for coding agents. Read before changing anything big:
@@ -12,7 +12,7 @@ This file is for coding agents. Read before changing anything big:
   layout, tooling, runtime and CI decisions
 
 The MVP is built as sub-projects, each with its own spec: **Foundation** (done), **Core slice**
-(`ProcessText` end to end: LLM gateway, prompts, diff engine, persistence), **Bot**, **Access**
+(`ProcessText` end to end: LLM gateway, prompts, persistence), **Bot**, **Access**
 (invites, auth, rate limits, daily budget), **Admin dashboard**.
 
 ## Commands
@@ -45,7 +45,7 @@ apps/api/src/engleks_api/
   transport/       routers, FastAPI dependencies, error → HTTP mapping
   admin/           admin pages mounted at /admin
   application/     use cases, one module each
-  domain/          entities, value objects, ports (Protocol), diff engine; no I/O
+  domain/          entities, value objects, ports (Protocol); no I/O
   infra/db/        SQLAlchemy Base, engine, repositories
   infra/llm/       provider adapters, prompts/ (versioned templates)
 apps/api/migrations/   Alembic
@@ -75,7 +75,7 @@ main.py wires infra adapters into use cases
 4. `engleks_api` and `engleks_bot` never import each other.
 5. `engleks_contracts` depends only on pydantic. In the API, only `transport` imports it; the
    domain keeps its own types and `transport` maps between them. When an enum (mode,
-   category) exists in both, a unit test asserts both have the same values.
+   language) exists in both, a unit test asserts both have the same values.
 
 Never add an import-linter exception to get green; change the design instead.
 

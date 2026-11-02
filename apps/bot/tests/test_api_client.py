@@ -86,7 +86,7 @@ def ok_response() -> ProcessTextResponse:
         source_language=Language.EN,
         mode=Mode.NATURAL,
         output_text="I went.",
-        changes=[],
+        explanations=[],
     )
 
 

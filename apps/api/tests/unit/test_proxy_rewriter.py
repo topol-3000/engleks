@@ -7,10 +7,8 @@ import pytest
 import structlog
 
 from engleks_api.domain.text_processing import (
-    Category,
     Language,
     Mode,
-    ModelChange,
     RewriteFailed,
     RewriteRequest,
     Usage,
@@ -25,14 +23,7 @@ VALID = json.dumps(
     {
         "source_language": "en",
         "output_text": "He goes home.",
-        "changes": [
-            {
-                "original": "go",
-                "replacement": "goes",
-                "category": "grammar",
-                "explanation": "Third person singular.",
-            }
-        ],
+        "explanations": ["Add -s to the verb after he, she or it: 'He goes home.'"],
     }
 )
 
@@ -86,9 +77,9 @@ def raises(exc: Exception) -> Handler:
 async def test_valid_reply():
     out = await make(lambda _: completion(VALID)).rewrite(REQ)
     assert (out.source_language, out.output_text) == (Language.EN, "He goes home.")
-    assert out.changes == [ModelChange("go", "goes", Category.GRAMMAR, "Third person singular.")]
+    assert out.explanations == ["Add -s to the verb after he, she or it: 'He goes home.'"]
     assert out.usage == Usage(
-        "ollama_chat/gemma3:4b", "process_text.v2", 100, 50, Decimal("0.0001")
+        "ollama_chat/gemma3:4b", "process_text.v3", 100, 50, Decimal("0.0001")
     )
     assert out.llm_response == json.loads(VALID)
 
@@ -109,25 +100,18 @@ async def test_request_shape():
     assert user == {"role": "user", "content": TEXT}
     assert system["role"] == "system"
     assert TEXT not in system["content"]
-    assert "Ukrainian" in system["content"]
+    assert system["content"].startswith("You are an English writing coach.")
 
 
-@pytest.mark.parametrize(
-    ("mode", "instruction"),
-    [
-        (Mode.MINIMAL, "fix errors only"),
-        (Mode.NATURAL, "sounds natural"),
-        (Mode.POLISHED, "improve clarity"),
-    ],
-)
-async def test_system_prompt_follows_mode(mode, instruction):
+async def test_system_prompt_is_the_same_for_every_mode_and_explanation_language():
     seen: list[httpx2.Request] = []
-    await make(recording([completion(VALID)], seen)).rewrite(
-        RewriteRequest(TEXT, mode, Language.EN)
-    )
-    system = json.loads(seen[0].content)["messages"][0]["content"]
-    assert f"Mode: {mode}" in system
-    assert instruction in system
+    requests = [RewriteRequest(TEXT, mode, lang) for mode in Mode for lang in Language]
+    rewriter = make(recording([completion(VALID) for _ in requests], seen))
+    for request in requests:
+        await rewriter.rewrite(request)
+    systems = {json.loads(r.content)["messages"][0]["content"] for r in seen}
+    assert len(systems) == 1
+    assert "Write every explanation in English" in systems.pop()
 
 
 async def test_invalid_then_valid_sends_correction_and_sums_usage():
@@ -150,9 +134,11 @@ async def test_invalid_then_valid_sends_correction_and_sums_usage():
     "bad",
     [
         "not json",
-        '{"source_language": "de", "output_text": "x", "changes": []}',
-        '{"source_language": "en", "output_text": "  ", "changes": []}',
-        '{"source_language": "en", "output_text": "x", "changes": [], "extra": 1}',
+        '{"source_language": "de", "output_text": "x", "explanations": []}',
+        '{"source_language": "en", "output_text": "  ", "explanations": []}',
+        '{"source_language": "en", "output_text": "x", "explanations": [" "]}',
+        '{"source_language": "en", "output_text": "x", "explanations": [], "extra": 1}',
+        '{"source_language": "en", "output_text": "x", "changes": []}',
         None,
         "",
     ],

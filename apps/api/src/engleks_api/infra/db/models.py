@@ -63,6 +63,8 @@ class InteractionRow(Base):
 
 
 class CorrectionRow(Base):
+    """Not written since process_text.v3, which returns lessons instead of changes."""
+
     __tablename__ = "correction"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)

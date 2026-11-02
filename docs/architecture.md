@@ -4,7 +4,7 @@
 
 A trainer for English writing, not a translator. The MVP includes:
 
-- **Improve**: modes `minimal`, `natural` (default) and `polished`. Returns a list of changes, each with a category and an explanation.
+- **Improve**: modes `minimal`, `natural` (default) and `polished`. Returns the improved text and up to five short lessons: reusable language patterns drawn from the edits, not an edit log. Since `process_text.v3` every mode uses the same prompt, and lessons are always in English.
 - **Translate**: UA/RU → EN with automatic language detection, in the same LLM call as Improve.
 - **Context profiles**: 2–3 per user, plus request history.
 - **Multiple users**: invite codes, usage limits and a simple admin dashboard.
@@ -22,7 +22,6 @@ flowchart LR
   WEB["Web (later)"] -.-> API
   API --> APP[Application: use cases]
   APP --> LLM[LLM Gateway]
-  APP --> DIFF[Diff Engine]
   APP --> REPO[Repositories]
   REPO --> PG[(PostgreSQL)]
   LLM --> PROXY["LiteLLM proxy"]
@@ -46,8 +45,6 @@ flowchart LR
 - Versioned prompt templates.
 - Structured output validated with Pydantic, with one retry on invalid JSON.
 
-**Diff Engine**: computes a word-level diff in code with `difflib` and matches it to the model's changes.
-
 **Persistence**: PostgreSQL with SQLAlchemy and Alembic. Raw LLM responses are stored as JSONB.
 
 **Admin UI**: server-rendered pages (Jinja2 + htmx, or SQLAdmin) mounted at `/admin` inside the API.
@@ -65,10 +62,9 @@ sequenceDiagram
   A->>D: rate limit + daily budget check
   A->>A: detect language, build prompt
   A->>L: generate(schema)
-  L-->>A: JSON {source_language, output_text, changes[]}
-  A->>A: compute diff
-  A->>D: save interaction, corrections; usage_daily += tokens
-  A-->>B: ProcessTextResponse {interaction_id, source_language, mode, output_text, changes[]}
+  L-->>A: JSON {source_language, output_text, explanations[]}
+  A->>D: save interaction; usage_daily += tokens
+  A-->>B: ProcessTextResponse {interaction_id, source_language, mode, output_text, explanations[]}
 ```
 
 Errors:
@@ -107,10 +103,8 @@ Errors:
 | `invite_code` | code, `created_by`, `max_uses`, `used_count`, `expires_at`, revoked |
 | `context_profile` | audience, tone, channel, glossary |
 | `interaction` | input, mode, language, full JSON response, model, prompt version, tokens, cost |
-| `correction` | original, replacement, category, explanation, span → interaction |
+| `correction` | original, replacement, category, explanation, span → interaction. Not written since `process_text.v3`; lessons are in `interaction`'s JSON response |
 | `usage_daily` | `user_id`, date, requests, `tokens_in`, `tokens_out`, cost |
-
-Correction categories: `grammar`, `articles`, `spelling`, `punctuation`, `word_choice`, `word_order`, `style`, and `other` for an edit the model did not explain.
 
 ## 8. API (draft)
 

@@ -17,17 +17,6 @@ class Language(StrEnum):
     RU = "ru"
 
 
-class Category(StrEnum):
-    GRAMMAR = "grammar"
-    ARTICLES = "articles"
-    SPELLING = "spelling"
-    PUNCTUATION = "punctuation"
-    WORD_CHOICE = "word_choice"
-    WORD_ORDER = "word_order"
-    STYLE = "style"
-    OTHER = "other"
-
-
 class Provider(StrEnum):
     TELEGRAM = "telegram"
 
@@ -42,16 +31,6 @@ class Usage:
 
 
 @dataclass(frozen=True)
-class ModelChange:
-    """A change as the model reports it. Untrusted until reconciled with the diff."""
-
-    original: str
-    replacement: str
-    category: Category
-    explanation: str
-
-
-@dataclass(frozen=True)
 class RewriteRequest:
     text: str
     mode: Mode
@@ -62,20 +41,9 @@ class RewriteRequest:
 class RewriteOutcome:
     source_language: Language
     output_text: str
-    changes: list[ModelChange]
+    explanations: list[str]
     usage: Usage
     llm_response: Mapping[str, object]
-
-
-@dataclass(frozen=True)
-class Change:
-    """A reconciled change. `span` is code point offsets into the input; None for translations."""
-
-    original: str
-    replacement: str
-    category: Category
-    explanation: str | None
-    span: tuple[int, int] | None
 
 
 @dataclass(frozen=True)
@@ -84,7 +52,7 @@ class ProcessedText:
     source_language: Language
     mode: Mode
     output_text: str
-    changes: list[Change]
+    explanations: list[str]
 
 
 @dataclass(frozen=True)
@@ -98,7 +66,6 @@ class Interaction:
     user_id: UUID
     request: RewriteRequest
     outcome: RewriteOutcome
-    changes: list[Change]
 
 
 class RewriteFailed(Exception):

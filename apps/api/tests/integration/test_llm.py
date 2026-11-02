@@ -3,7 +3,6 @@ from collections.abc import AsyncIterator
 import pytest
 
 from engleks_api.config import Settings
-from engleks_api.domain.diff import reconcile
 from engleks_api.domain.text_processing import Language, Mode, RewriteRequest
 from engleks_api.infra.llm.proxy_rewriter import ProxyRewriter
 
@@ -24,12 +23,11 @@ async def rewriter() -> AsyncIterator[ProxyRewriter]:
     await r.aclose()
 
 
-async def test_english_text_gets_explained_positioned_changes(rewriter):
+async def test_english_text_gets_corrected_with_lessons(rewriter):
     text = "Yesterday I go to shop and buy two apple."
     out = await rewriter.rewrite(RewriteRequest(text, Mode.MINIMAL, Language.EN))
     assert out.source_language is Language.EN and out.output_text != text
-    changes = reconcile(text, out.output_text, out.changes).changes
-    assert any(c.explanation and c.span for c in changes)
+    assert 1 <= len(out.explanations) <= 5
 
 
 async def test_ukrainian_text_is_translated(rewriter):

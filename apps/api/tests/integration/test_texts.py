@@ -6,9 +6,7 @@ import pytest
 from sqlalchemy import text
 
 from engleks_api.domain.text_processing import (
-    Category,
     Language,
-    ModelChange,
     RewriteFailed,
     RewriteOutcome,
     RewriteRequest,
@@ -27,8 +25,8 @@ class FakeRewriter:
         self.outcome = RewriteOutcome(
             source_language=Language.EN,
             output_text="He goes home.",
-            changes=[ModelChange("go", "goes", Category.GRAMMAR, "Third person.")],
-            usage=Usage("ollama_chat/gemma3:4b", "process_text.v1", 10, 5, Decimal("0.0001")),
+            explanations=["Add -s to the verb after he, she or it."],
+            usage=Usage("ollama_chat/gemma3:4b", "process_text.v3", 10, 5, Decimal("0.0001")),
             llm_response={"source_language": "en"},
         )
         self.fail_with: RewriteFailed | None = None
@@ -126,7 +124,7 @@ async def test_llm_failure_502_saves_nothing(api, engine):
     assert await count_interactions(engine, "5151") == 0
 
 
-async def test_success_returns_positioned_changes_and_saves_rows(api, engine):
+async def test_success_returns_explanations_and_saves_interaction(api, engine):
     client, fake = api
     r = await client.post(
         URL,
@@ -136,17 +134,9 @@ async def test_success_returns_positioned_changes_and_saves_rows(api, engine):
     assert r.status_code == 200
     body = ProcessTextResponse.model_validate(r.json())
     assert (body.mode, body.output_text) == (Mode.NATURAL, "He goes home.")
-    assert [(c.original, c.replacement, c.category, c.start, c.end) for c in body.changes] == [
-        ("go", "goes", "grammar", 3, 5)
-    ]
+    assert body.explanations == ["Add -s to the verb after he, she or it."]
     assert fake.requests[0].explanation_language is Language.UK
-    async with engine.connect() as c:
-        saved = await c.scalar(
-            text("SELECT count(*) FROM correction WHERE interaction_id = :i"),
-            {"i": body.interaction_id},
-        )
     assert await count_interactions(engine, "6161") == 1
-    assert saved == 1
 
 
 async def test_same_user_twice_reuses_identity(api, engine):

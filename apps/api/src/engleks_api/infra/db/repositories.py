@@ -5,7 +5,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from engleks_api.domain.text_processing import Interaction, Provider
-from engleks_api.infra.db.models import CorrectionRow, IdentityRow, InteractionRow, UserRow
+from engleks_api.infra.db.models import IdentityRow, InteractionRow, UserRow
 
 # Each method opens its own session and is one transaction, so no connection is held
 # between calls (in particular, not during the LLM call).
@@ -74,19 +74,4 @@ class SqlInteractionRepository:
                     tokens_out=usage.tokens_out,
                     cost=usage.cost,
                 )
-            )
-            await session.flush()  # the FK target must exist before the corrections
-            session.add_all(
-                CorrectionRow(
-                    id=uuid.uuid7(),
-                    interaction_id=interaction.id,
-                    position=position,
-                    original=change.original,
-                    replacement=change.replacement,
-                    category=change.category.value,
-                    explanation=change.explanation,
-                    span_start=change.span[0] if change.span else None,
-                    span_end=change.span[1] if change.span else None,
-                )
-                for position, change in enumerate(interaction.changes)
             )

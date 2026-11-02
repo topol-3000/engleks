@@ -11,27 +11,16 @@ from aiogram.types import CallbackQuery, Chat, InaccessibleMessage
 from engleks_bot.handlers.rerun import rerun
 from engleks_bot.rendering.errors import ALREADY_WORKING, LLM_DOWN, ORIGINAL_GONE, TOO_OLD
 from engleks_bot.rendering.keyboards import RerunCallback, keyboard_modes, rerun_keyboard
-from engleks_contracts import Category, ChangeItem, Language, Mode, ProcessTextResponse
+from engleks_contracts import Language, Mode, ProcessTextResponse
 
 
-def change(original: str, replacement: str) -> ChangeItem:
-    return ChangeItem(
-        original=original,
-        replacement=replacement,
-        category=Category.GRAMMAR,
-        explanation=None,
-        start=None,
-        end=None,
-    )
-
-
-def ok(*, output="I went.", mode=Mode.MINIMAL, changes=()) -> ProcessTextResponse:
+def ok(*, output="I went.", mode=Mode.MINIMAL, explanations=()) -> ProcessTextResponse:
     return ProcessTextResponse(
         interaction_id=UUID(int=1),
         source_language=Language.EN,
         mode=mode,
         output_text=output,
-        changes=list(changes),
+        explanations=list(explanations),
     )
 
 

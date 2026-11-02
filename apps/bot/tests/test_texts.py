@@ -20,29 +20,18 @@ from engleks_bot.rendering.errors import (
     UNAVAILABLE,
 )
 from engleks_bot.rendering.keyboards import keyboard_modes
-from engleks_contracts import Category, ChangeItem, Language, Mode, ProcessTextResponse
+from engleks_contracts import Language, Mode, ProcessTextResponse
 
 USER = User(id=1, is_bot=False, first_name="U")
 
 
-def change(original: str, replacement: str) -> ChangeItem:
-    return ChangeItem(
-        original=original,
-        replacement=replacement,
-        category=Category.GRAMMAR,
-        explanation=None,
-        start=None,
-        end=None,
-    )
-
-
-def ok(*, output="I went.", mode=Mode.NATURAL, changes=()) -> ProcessTextResponse:
+def ok(*, output="I went.", mode=Mode.NATURAL, explanations=()) -> ProcessTextResponse:
     return ProcessTextResponse(
         interaction_id=UUID(int=1),
         source_language=Language.EN,
         mode=mode,
         output_text=output,
-        changes=list(changes),
+        explanations=list(explanations),
     )
 
 
@@ -56,7 +45,7 @@ async def test_request_and_reply(make_message, make_api, bot, sent):
     def handler(request):
         seen.append(request)
         return httpx2.Response(
-            200, json=ok(changes=[change("has went", "went")]).model_dump(mode="json")
+            200, json=ok(explanations=["Use the past simple."]).model_dump(mode="json")
         )
 
     await on_text(make_message("I has went."), USER, make_api(handler), bot)
@@ -145,7 +134,7 @@ async def test_text_at_limit_is_processed(make_message, make_api, bot, sent):
 
 
 async def test_logs_never_contain_text(make_message, make_api, bot):
-    api = make_api(reply_with(ok(output="Our secret output", changes=[change("a", "b")])))
+    api = make_api(reply_with(ok(output="Our secret output", explanations=["A secret lesson."])))
     with structlog.testing.capture_logs() as logs:
         await on_text(make_message("My secret text"), USER, api, bot)
     [entry] = [e for e in logs if e["event"] == "text_processed"]
@@ -153,7 +142,7 @@ async def test_logs_never_contain_text(make_message, make_api, bot):
     assert entry["mode"] == "natural"
     assert entry["source_language"] == "en"
     assert entry["text_len"] == 14
-    assert entry["changes"] == 1
+    assert entry["explanations"] == 1
     assert entry["messages"] == 1
     assert isinstance(entry["duration_ms"], int) and entry["duration_ms"] >= 0
     assert "secret" not in repr(logs)

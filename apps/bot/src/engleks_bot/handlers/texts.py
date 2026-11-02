@@ -77,7 +77,7 @@ async def process_and_reply(
         mode=mode.value,
         source_language=response.source_language.value,
         text_len=len(text),
-        changes=len(response.changes),
+        explanations=len(response.explanations),
         messages=len(parts),
         duration_ms=duration_ms,
     )
