@@ -5,22 +5,32 @@ from engleks_api.domain.diff import Hunk, diff
 DONT_CURLY = "don\u2019t"  # a phone's curly apostrophe
 
 CASES = [
-    ("comma_insert", "Hi John how are you", "Hi John, how are you", [Hunk((8, 8), "", ",")]),
-    ("article_insert", "I have cat", "I have a cat", [Hunk((7, 7), "", "a")]),
-    ("replacement", "He go home", "He goes home", [Hunk((3, 5), "go", "goes")]),
-    ("deletion", "I very like it", "I like it", [Hunk((2, 6), "very", "")]),
+    (
+        "comma_insert",
+        "Hi John how are you",
+        "Hi John, how are you",
+        [Hunk((8, 8), "", ",", (7, 8))],
+    ),
+    ("article_insert", "I have cat", "I have a cat", [Hunk((7, 7), "", "a", (7, 8))]),
+    ("replacement", "He go home", "He goes home", [Hunk((3, 5), "go", "goes", (3, 7))]),
+    ("deletion", "I very like it", "I like it", [Hunk((2, 6), "very", "", (2, 2))]),
     (
         "multi_token_keeps_user_spacing",
         "a  lot of people",
         "many people",
-        [Hunk((0, 9), "a  lot of", "many")],
+        [Hunk((0, 9), "a  lot of", "many", (0, 4))],
     ),
-    ("contraction_one_token", "I dont know", "I don't know", [Hunk((2, 6), "dont", "don't")]),
+    (
+        "contraction_one_token",
+        "I dont know",
+        "I don't know",
+        [Hunk((2, 6), "dont", "don't", (2, 7))],
+    ),
     (
         "curly_contraction_one_token",
         f"I {DONT_CURLY} know",
         f"I {DONT_CURLY} know.",
-        [Hunk((12, 12), "", ".")],
+        [Hunk((12, 12), "", ".", (12, 13))],
     ),
     ("curly_vs_straight_is_no_change", f"I {DONT_CURLY} know", "I don't know", []),
     ("whitespace_only", "Hello  world", "Hello\nworld", []),
@@ -28,10 +38,10 @@ CASES = [
         "repeated_word_second_occurrence",
         "a cat and a dog",
         "a cat and the dog",
-        [Hunk((10, 11), "a", "the")],
+        [Hunk((10, 11), "a", "the", (10, 13))],
     ),
-    ("emoji_before_edit", "🙂 he go", "🙂 he goes", [Hunk((5, 7), "go", "goes")]),
-    ("insert_at_end", "Thanks", "Thanks!", [Hunk((6, 6), "", "!")]),
+    ("emoji_before_edit", "🙂 he go", "🙂 he goes", [Hunk((5, 7), "go", "goes", (5, 9))]),
+    ("insert_at_end", "Thanks", "Thanks!", [Hunk((6, 6), "", "!", (6, 7))]),
     ("identical", "Fine.", "Fine.", []),
 ]
 

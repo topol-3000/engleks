@@ -2,7 +2,7 @@ import uuid
 
 import structlog
 
-from engleks_api.domain.diff import diff, reconcile
+from engleks_api.domain.diff import reconcile
 from engleks_api.domain.ports import InteractionRepository, TextRewriter
 from engleks_api.domain.text_processing import (
     AuthContext,
@@ -24,11 +24,10 @@ async def process_text(
 ) -> ProcessedText:
     outcome = await rewriter.rewrite(request)
     if outcome.source_language is Language.EN:
-        hunks = diff(request.text, outcome.output_text)
-        result = reconcile(hunks, outcome.changes)
+        result = reconcile(request.text, outcome.output_text, outcome.changes)
         log.info(
             "diff_reconciled",
-            hunks=len(hunks),
+            hunks=result.hunks,
             matched=result.matched,
             unexplained=result.unexplained,
             dropped=result.dropped,

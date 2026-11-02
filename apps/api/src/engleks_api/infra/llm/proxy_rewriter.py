@@ -19,7 +19,7 @@ from engleks_api.infra.llm.schema import LLMRewrite
 
 log = structlog.stdlib.get_logger()
 
-PROMPT_VERSION = "process_text.v1"
+PROMPT_VERSION = "process_text.v2"
 _TEMPERATURE = 0.2
 _LANGUAGE_NAMES = {Language.EN: "English", Language.UK: "Ukrainian", Language.RU: "Russian"}
 

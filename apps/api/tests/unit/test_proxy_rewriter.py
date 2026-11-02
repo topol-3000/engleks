@@ -88,7 +88,7 @@ async def test_valid_reply():
     assert (out.source_language, out.output_text) == (Language.EN, "He goes home.")
     assert out.changes == [ModelChange("go", "goes", Category.GRAMMAR, "Third person singular.")]
     assert out.usage == Usage(
-        "ollama_chat/gemma3:4b", "process_text.v1", 100, 50, Decimal("0.0001")
+        "ollama_chat/gemma3:4b", "process_text.v2", 100, 50, Decimal("0.0001")
     )
     assert out.llm_response == json.loads(VALID)
 
@@ -110,6 +110,24 @@ async def test_request_shape():
     assert system["role"] == "system"
     assert TEXT not in system["content"]
     assert "Ukrainian" in system["content"]
+
+
+@pytest.mark.parametrize(
+    ("mode", "instruction"),
+    [
+        (Mode.MINIMAL, "fix errors only"),
+        (Mode.NATURAL, "sounds natural"),
+        (Mode.POLISHED, "improve clarity"),
+    ],
+)
+async def test_system_prompt_follows_mode(mode, instruction):
+    seen: list[httpx2.Request] = []
+    await make(recording([completion(VALID)], seen)).rewrite(
+        RewriteRequest(TEXT, mode, Language.EN)
+    )
+    system = json.loads(seen[0].content)["messages"][0]["content"]
+    assert f"Mode: {mode}" in system
+    assert instruction in system
 
 
 async def test_invalid_then_valid_sends_correction_and_sums_usage():
