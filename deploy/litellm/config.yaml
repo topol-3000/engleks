@@ -20,6 +20,10 @@ model_list:
     litellm_params:
       model: ollama_chat/mistral-small:latest
       api_base: http://host.docker.internal:11434
+environment_variables:
+  # Spend logs cut stored prompts at 2048 chars by default; the prompt alone is ~7000 and
+  # the user's text adds up to 4096 (TextIn.text), so keep whole requests and responses.
+  MAX_STRING_LENGTH_PROMPT_IN_DB: "32768"
 litellm_settings:
   num_retries: 0                 # the API's corrective retry is the only retry
   request_timeout: 55            # just under API_LLM_TIMEOUT_S (60)
