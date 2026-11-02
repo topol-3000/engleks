@@ -71,8 +71,17 @@ Migrations: both existing files are deleted and replaced by one `0001_initial.py
 reviewed by hand. The `alembic check` test proves models and migration agree.
 
 This is a one-off pre-release reset. The rule "never edit a migration that is on `main`" stays in
-AGENTS.md and applies from here on. To recreate a local database: `docker compose down -v`, then
-`make dev-db && make migrate`. The commit message says so.
+AGENTS.md and applies from here on. To recreate a local database, drop and recreate only the API's
+database, then migrate. `docker compose down -v` would also wipe the LiteLLM database (its keys) and
+the Ollama models, so do not use it:
+
+```bash
+docker compose exec postgres psql -U engleks -d postgres \
+  -c 'DROP DATABASE engleks WITH (FORCE)' -c 'CREATE DATABASE engleks'
+make migrate
+```
+
+The commit message and `docs/architecture.md` say so.
 
 ## 6. Bot
 
