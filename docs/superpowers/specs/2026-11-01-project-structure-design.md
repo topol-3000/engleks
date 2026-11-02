@@ -9,7 +9,7 @@ Set up the repository skeleton that every MVP feature will be built on: layout, 
 The architecture document splits the MVP into these sub-projects, in build order:
 
 1. **Foundation** (this spec): layout, tooling, Compose, config, migrations, tests, CI.
-2. **Core slice**: `ProcessText` end to end (LLM gateway, prompts, diff engine, persistence).
+2. **Core slice**: `ProcessText` end to end (LLM gateway, prompts, persistence).
 3. **Bot**: aiogram client of the API.
 4. **Access**: invites, identity, auth, rate limits, daily budget.
 5. **Admin dashboard.**
@@ -57,7 +57,7 @@ engleks/
         config.py           # pydantic-settings
         transport/          # routers, auth dependencies, error → HTTP mapping
         application/        # use cases, one module each
-        domain/             # entities, value objects, ports, diff engine
+        domain/             # entities, value objects, ports
         infra/
           db/               # SQLAlchemy models, repositories, session
           llm/              # provider adapters, prompts/ (versioned templates)
@@ -78,13 +78,12 @@ engleks/
   packages/
     contracts/
       pyproject.toml
-      src/engleks_contracts/  # request/response DTOs, error codes, enums (mode, category)
+      src/engleks_contracts/  # request/response DTOs, error codes, enums (language)
 ```
 
 Notes:
 
 - `src/` layout everywhere, so tests run against the installed package.
-- The diff engine lives in `domain/`: it is pure `difflib` computation with no I/O.
 - Prompt templates live in `infra/llm/prompts/` with the version in the file name (`improve.v1.j2`). The version is stored on each `interaction`.
 - Each app's tests stay inside the app, so bot tests never install API dependencies.
 
@@ -105,7 +104,7 @@ Enforced by import-linter in CI:
 4. **App isolation**: `engleks_bot` and `engleks_api` do not import each other. `engleks_contracts` imports neither and depends only on pydantic.
 5. **Contracts at the edge**: only `engleks_api.transport` and `engleks_bot` import `engleks_contracts`. The domain keeps its own types and transport maps between them.
 
-Rule 5 duplicates a few small definitions, such as the `mode` and `category` enums. This is deliberate: it keeps the public API and the domain independent. A unit test asserts that each duplicated enum has the same values in both places.
+Rule 5 duplicates a few small definitions, such as the `language` enum. This is deliberate: it keeps the public API and the domain independent. A unit test asserts that each duplicated enum has the same values in both places.
 
 Wiring uses no DI framework. `main.py` builds adapters from settings, and FastAPI dependencies pass them into use cases per request.
 
@@ -197,7 +196,7 @@ The uv cache is keyed on `uv.lock`. Third-party actions, including Trivy's, are 
 
 ## 10. Out of scope
 
-- `ProcessText`, the LLM gateway implementation, prompts and the diff engine.
+- `ProcessText`, the LLM gateway implementation and prompts.
 - Database tables beyond the empty initial migration.
 - Auth, invites, limits, profiles, history, settings and the admin dashboard.
 - Image registry, deployment target and production secrets management.

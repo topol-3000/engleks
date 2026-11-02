@@ -588,7 +588,7 @@ forbidden_modules = ["engleks_contracts"]
 
 If `lint-imports` rejects `litellm` because it isn't installed yet, remove it from "Pure core" and add a `# TODO(core-slice)` comment; the Core slice adds it back together with the dependency.
 
-The spec's enum-parity unit test (for enums duplicated between contracts and domain) isn't added here because the foundation duplicates no enum. The Core slice adds it with `Mode` and `Category`.
+The spec's enum-parity unit test (for enums duplicated between contracts and domain) isn't added here because the foundation duplicates no enum. The Core slice adds it with `Language`.
 
 - [ ] **Step 2: Run** `uv run lint-imports` — Expected: `Contracts: 7 kept, 0 broken.`
 - [ ] **Step 3: Prove a contract bites** — add `import sqlalchemy` to `domain/ports.py`, run `uv run lint-imports`, expect `Pure core BROKEN`; then `git checkout apps/api/src/engleks_api/domain/ports.py`.

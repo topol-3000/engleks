@@ -1,8 +1,8 @@
 # AGENTS.md: engleks
 
 A trainer for English writing, not a translator. Users send text to a Telegram bot; the API
-improves it (modes `minimal`, `natural`, `polished`) or translates it from UA/RU, and teaches
-short lessons drawn from the edits. Context profiles, history, invite codes, usage limits and an admin dashboard
+corrects it or translates it from UA/RU, and teaches short English lessons drawn from the
+edits. Context profiles, history, invite codes, usage limits and an admin dashboard
 complete the MVP.
 
 This file is for coding agents. Read before changing anything big:
@@ -74,8 +74,8 @@ main.py wires infra adapters into use cases
    litellm, aiogram.
 4. `engleks_api` and `engleks_bot` never import each other.
 5. `engleks_contracts` depends only on pydantic. In the API, only `transport` imports it; the
-   domain keeps its own types and `transport` maps between them. When an enum (mode,
-   language) exists in both, a unit test asserts both have the same values.
+   domain keeps its own types and `transport` maps between them. When an enum (language)
+   exists in both, a unit test asserts both have the same values.
 
 Never add an import-linter exception to get green; change the design instead.
 
@@ -96,8 +96,8 @@ Never add an import-linter exception to get green; change the design instead.
 | an LLM-backed task | task-level port in `domain/ports.py` (e.g. `TextRewriter`), adapter in `infra/llm/` that calls only the LiteLLM proxy over `httpx2` and validates the output into an infra Pydantic model (see `ProxyRewriter`) |
 | a prompt | `infra/llm/prompts/<name>.v<N>.j2`; a changed prompt is a new version, never an edit |
 | an endpoint that needs the caller | `auth: Annotated[AuthContext, Depends(auth_context)]` from `transport/auth.py`; use cases receive `AuthContext`, never headers |
-| a shared object in the bot (`ApiClient`, the in-flight set) | dispatcher workflow data in `main.build_dispatcher()`, received as a handler argument |
-| a bot command or button | `handlers/<feature>.py` with a `build_router()` factory, included in `main.build_dispatcher()`; layout in `rendering/` |
+| a shared object in the bot (`ApiClient`) | dispatcher workflow data in `main.build_dispatcher()`, received as a handler argument |
+| a bot command | `handlers/<feature>.py` with a `build_router()` factory, included in `main.build_dispatcher()`; layout in `rendering/` |
 
 ## Code rules
 

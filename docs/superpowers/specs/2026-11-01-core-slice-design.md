@@ -4,17 +4,17 @@ Status: draft for review · Date: 2026-11-01 · Related: [MVP Architecture](../.
 
 ## 1. Goal
 
-Build `ProcessText` end to end: `POST /v1/texts/process` takes a user's text, improves it (English) or translates it (UA/RU → EN) in one LLM call, explains every change, and stores the result. This is sub-project 2 of 5 (Foundation, **Core slice**, Bot, Access, Admin dashboard).
+Build `ProcessText` end to end: `POST /v1/texts/process` takes a user's text, improves it (English) or translates it (UA/RU → EN) in one LLM call, teaches up to five short English lessons drawn from the edits, and stores the result. This is sub-project 2 of 5 (Foundation, **Core slice**, Bot, Access, Admin dashboard).
 
-Done means: with the LiteLLM proxy and Ollama running, a `curl` to the endpoint returns an improved text with explained, positioned changes, and the interaction and its corrections are in Postgres.
+Done means: with the LiteLLM proxy and Ollama running, a `curl` to the endpoint returns an improved text with lessons, and the interaction is in Postgres.
 
 ## 2. Scope
 
 In scope:
 
-- Domain model, diff engine and reconciliation.
-- LLM gateway: a LiteLLM Proxy Compose service (Ollama upstream in dev, OpenAI in prod, Admin UI on), and one API adapter that calls only the proxy; prompt `process_text.v1`.
-- Tables `app_user`, `identity`, `interaction`, `correction` (migration `0002`).
+- Domain model.
+- LLM gateway: a LiteLLM Proxy Compose service (Ollama upstream in dev, OpenAI in prod, Admin UI on), and one API adapter that calls only the proxy; prompt `process_text.v3`.
+- Tables `app_user`, `identity`, `interaction` (migration `0001`).
 - Minimal auth: shared bot token plus Telegram user id, auto-creating the user.
 - `POST /v1/texts/process` and its contract DTOs.
 
@@ -25,8 +25,7 @@ Out of scope, with the reason:
 | Invites, user status, `403 forbidden` | Access | Access replaces auto-create in one function (§8) |
 | Rate limits, daily budget, `usage_daily` | Access | Spend is logged per call now; accounting needs limits to be useful |
 | Context profiles, `profile_id` | Own sub-project | Adding an optional request field later is a non-breaking change |
-| `GET/PATCH /v1/me/settings` | Later | `explanation_language` is a request field until then (§4) |
-| Variants for other modes, `vocabulary_candidates` | Later prompt version | Saved vocabulary is out of MVP scope; variants roughly triple output tokens |
+| Lesson language, per-user settings, `vocabulary_candidates` | Later prompt version | One behaviour keeps the prompt small enough for local models; saved vocabulary is out of MVP scope |
 | Bot handler for this endpoint | Bot | Separate sub-project; see §9 for the timeout it needs |
 
 **Known gap:** until Access ships, anyone who can message the bot gets an account. The bot must not be made public before Access.
@@ -39,9 +38,8 @@ Out of scope, with the reason:
 | Ollama | Reachable only from the proxy, on a separate network | Enforces "no direct Ollama" by network design, not convention |
 | LLM port | Task-level `TextRewriter`, not a generic `LLMProvider` | Prompts and schemas stay in `infra`; a generic port would push them through `application`, which the import contracts forbid. Later features get their own task-level ports sharing the proxy client |
 | Language detection | By the model, in the same call (`source_language`) | Architecture §1. An alphabet heuristic breaks on mixed text |
-| Explanation language | Request field, default `en` | No settings endpoint yet; when it arrives, the stored setting becomes the default |
-| Output | One text for the chosen mode, plus changes | §2 |
-| Diff vs model | The diff is the truth | The user sees every real edit and never an explanation of an edit that didn't happen |
+| Output | One corrected or translated text, plus up to five lessons in English | Lessons teach reusable patterns; an edit log of every change is noise for a learner |
+| One prompt | `process_text.v3`, no template variables | One behaviour for every request. It stays a Jinja template so later versions can add variables without changing how prompts load |
 | Identity | Minimal auth now | `interaction.user_id` is `NOT NULL` from day one, no backfill; the Bot sub-project calls the real endpoint |
 
 ## 4. Domain model
@@ -50,15 +48,11 @@ Out of scope, with the reason:
 
 | Type | Fields | Why |
 | --- | --- | --- |
-| `Mode` | `minimal`, `natural`, `polished` | Architecture §1 |
-| `Language` | `en`, `uk`, `ru` | One enum for detected and explanation language: users write in these and want explanations in these |
-| `Category` | `grammar`, `articles`, `spelling`, `punctuation`, `word_choice`, `word_order`, `style`, `other` | Coarse on purpose: a small, distinct label set is classified more consistently, especially by small local models. `articles` is separate because UA/RU have none, so article errors are among the most frequent for these learners. `word_order` because UA/RU order is freer than English. `other` is assigned by reconciliation, never asked of the model |
+| `Language` | `en`, `uk`, `ru` | The detected source language: users write in these |
 | `Usage` | `model`, `prompt_version`, `tokens_in`, `tokens_out`, `cost: Decimal \| None` | Logged and stored per call; per-user cost is what Access budgets need, and the proxy only sees one caller. `Decimal` because sub-cent costs are summed; floats drift |
-| `ModelChange` | `original`, `replacement`, `category`, `explanation` | What the model claims. Untrusted, never returned directly |
-| `RewriteRequest` | `text`, `mode`, `explanation_language` | Crosses the port |
-| `RewriteOutcome` | `source_language`, `output_text`, `changes: list[ModelChange]`, `usage`, `llm_response: Mapping[str, object]` | Crosses the port. `llm_response` is the validated model output dumped to JSON, for storage; never raw text |
-| `Change` | `original`, `replacement`, `category`, `explanation: str \| None`, `span: tuple[int, int] \| None` | Reconciled result. `span` is code-point offsets into the input text; `None` for translations. Insertion: empty `original`; deletion: empty `replacement` |
-| `ProcessedText` | `interaction_id`, `source_language`, `mode`, `output_text`, `changes` | Use case result |
+| `RewriteOutcome` | `source_language`, `output_text`, `explanations: list[str]`, `usage`, `llm_response: Mapping[str, object]` | Returned by `TextRewriter.rewrite(text: str)`. `llm_response` is the validated model output dumped to JSON, for storage; never raw text |
+| `Interaction` | `id`, `user_id`, `input_text`, `outcome` | What `InteractionRepository.add` stores |
+| `ProcessedText` | `interaction_id`, `source_language`, `output_text`, `explanations` | Use case result |
 | `AuthContext` | `user_id` | Use cases never see Telegram details (architecture §4) |
 | `Provider` | `telegram` | Identity provider; web comes later |
 | `RewriteFailed(reason)` | exception | The LLM could not produce a valid result; `reason` tells causes apart in logs |
@@ -70,32 +64,21 @@ Out of scope, with the reason:
 ```python
 class ProcessTextRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4096)   # validator rejects blank text, does not strip
-    mode: Mode = Mode.MINIMAL
-    explanation_language: Language = Language.EN
-
-class ChangeItem(BaseModel):
-    original: str
-    replacement: str
-    category: Category
-    explanation: str | None
-    start: int | None   # Unicode code points into the request text; null for translations
-    end: int | None
 
 class ProcessTextResponse(BaseModel):
     interaction_id: UUID
-    source_language: Language
-    mode: Mode
+    source_language: Language   # en | uk | ru
     output_text: str
-    changes: list[ChangeItem]
+    explanations: list[str]     # English lessons; the prompt asks for at most 5, not validated
 ```
 
 | Decision | Why |
 | --- | --- |
 | `max_length=4096` | Telegram's limit for one message, so any message the bot receives is accepted unchanged. Splitting input would cut the context the model needs. Also bounds tokens and cost per call |
-| Reject blank text, don't strip | Stripping would shift every offset relative to what the client sent |
-| Offsets in code points, documented in the DTO docstring | They are Python `str` indices. Telegram entities count UTF-16 units, so the bot must convert, or any emoji before an edit misaligns the highlight |
-| `interaction_id` returned | The bot's inline buttons (architecture §2) need a handle to the interaction |
-| `Mode`, `Language`, `Category` duplicated in contracts and domain | AGENTS.md rule 5. A unit test asserts equal values |
+| Reject blank text, don't strip | The model sees exactly what the user wrote |
+| Unknown request fields are ignored | Pydantic's default; a client built for an older contract still gets a 200 |
+| `interaction_id` returned | A handle for history and later features |
+| `Language` duplicated in contracts and domain | AGENTS.md rule 5. A unit test asserts equal values |
 | New `ErrorCode`s: `unauthorized` (401), `llm_unavailable` (502) | The two failures this slice can produce. `forbidden` and `rate_limited` come with Access; adding values is safe while the bot is the only client |
 
 ## 6. LLM gateway
@@ -145,7 +128,7 @@ network llm:                    litellm ──▶ ollama:11434     (dev profile)
 | Decision | Why |
 | --- | --- |
 | `httpx2` POST to `{LLM_BASE_URL}/chat/completions` with `Authorization: Bearer <virtual key>` | The proxy is OpenAI-compatible; `httpx2` is already in the workspace. The API does not depend on the `litellm` package |
-| Prompt `prompts/process_text.v1.j2`, rendered with Jinja2; version string `process_text.v1` logged and stored | AGENTS.md: a changed prompt is a new file. The stored version lets prompt versions be compared |
+| Prompt `prompts/process_text.v3.j2`, rendered with Jinja2 and no variables; version string `process_text.v3` logged and stored | AGENTS.md: a changed prompt is a new file. The stored version lets prompt versions be compared |
 | Instructions in the system message; the user's text alone in the user message, never in the template | Text like "ignore previous instructions" stays data. An identical system prefix qualifies for OpenAI's automatic prompt caching (prefixes of 1024+ tokens) |
 | `temperature = 0.2` | Corrections should be reproducible |
 | Infra-only Pydantic model `LLMRewrite` → JSON schema as `response_format` | The proxy passes it to OpenAI as strict structured output and to Ollama as `format`: one code path for both |
@@ -161,41 +144,23 @@ network llm:                    litellm ──▶ ollama:11434     (dev profile)
 - API runtime dependencies: `httpx2` (already in the workspace and lock) and `jinja2`. No `litellm` Python package; it stays on import-linter's forbidden lists.
 - `make scan` and the CI scan job add `trivy image` for the pinned LiteLLM image: `trivy fs` never looks inside images, and the proxy is the largest new risk.
 
-## 7. Diff engine and reconciliation (`domain/diff.py`)
+## 7. Lessons
 
-Runs only when `source_language == en`. For `uk`/`ru` the model's changes pass through with `span=None`: there is no shared text to align a translation against.
-
-### Tokenizing and diffing
-
-| Decision | Why |
-| --- | --- |
-| Tokens: `re.finditer(r"\w+(?:['’]\w+)*\|[^\w\s]")`, each keeping `start`/`end` in the source | Word-level, as architecture §2 asks. Punctuation as its own token makes an added comma `"" → ","`, not `"word" → "word,"`. Contractions stay one token, so `dont → don't` is one change. `’` because phones insert curly apostrophes |
-| Whitespace is not a token | Whitespace-only edits teach nothing, and Telegram clients may alter whitespace |
-| `difflib.SequenceMatcher(None, a, b, autojunk=False)` | Standard library. With the default `autojunk`, tokens over 1% of a 200+ token sequence count as junk, so `the` and `,` stop anchoring the alignment on texts of roughly 200 words, well within the 4096-character limit |
-| Each non-equal opcode → `Hunk(span, original, replacement)`; `original = input[span]` from first token start to last token end; an insertion gets a zero-length span at the next token's start or at the end of the text | Slicing the real input keeps offsets and displayed text consistent, with the user's own spacing |
-| No optimization | At most about 900 tokens; quadratic worst case is negligible |
-
-### Reconciliation
-
-| Rule | Why |
-| --- | --- |
-| A model change matches a hunk when `original` and `replacement` each agree after normalization (casefold, collapsed whitespace), where agree means one contains the other; an empty side matches only an empty side | Models quote a little more or less context than the diff ("in **the** morning" vs "the"). The empty-side rule stops `""` matching everything |
-| Model changes in order; each takes the first matching hunk in text order, preferring unclaimed hunks | Models list changes roughly in text order; settles repeated words without fuzzy scoring |
-| One `Change` per hunk; several matches in one hunk → first category wins, explanations joined | The hunk is the unit the user sees highlighted |
-| Unmatched hunk → `category=other`, `explanation=None`; model change with no hunk → dropped | "The diff is the truth" |
-| Result sorted by `span.start`; identical input and output → no changes | Render order; an empty list is the honest "nothing to fix" |
-| Log `diff_reconciled` with `hunks`, `matched`, `unexplained`, `dropped` | Measures how faithful each prompt version is. Counts only |
+The model returns `explanations`: up to five short lessons in English, each a reusable pattern drawn
+from a correction it made or a non-literal translation choice, not a description of one edit. They
+are returned as the model wrote them (after the blank-string check in `LLMRewrite`) and are stored
+only inside `interaction.llm_response`. Minor fixes may go unexplained, so an empty list does not
+mean the text was unchanged.
 
 ## 8. Persistence and auth
 
-### Tables (migration `0002`)
+### Tables (migration `0001`)
 
 | Table | Columns | Why |
 | --- | --- | --- |
 | `app_user` | `id`, `created_at` | Not `user`: reserved in Postgres, so every raw query would need quoting. Status, limits and settings come with the code that reads them (Access, Settings) |
 | `identity` | `id`, `user_id` FK, `provider`, `external_id TEXT`, `created_at`, `UNIQUE(provider, external_id)` | Keeps Telegram out of `app_user` (architecture §4). `TEXT` because OIDC subjects are strings. The unique constraint makes find-or-create safe |
-| `interaction` | `id`, `user_id` FK, `created_at`, `mode`, `source_language`, `explanation_language`, `input_text`, `output_text`, `llm_response JSONB`, `model`, `prompt_version`, `tokens_in`, `tokens_out`, `cost NUMERIC(12,8) NULL`; index `(user_id, created_at DESC)` | Architecture §7. `llm_response` allows auditing prompts and replaying reconciliation without paying again. The index serves `GetHistory` |
-| `correction` | `id`, `interaction_id` FK `ON DELETE CASCADE`, `position`, `original`, `replacement`, `category`, `explanation NULL`, `span_start NULL`, `span_end NULL` | One row per `Change`; `position` keeps display order; cascade avoids orphans |
+| `interaction` | `id`, `user_id` FK, `created_at`, `source_language`, `input_text`, `output_text`, `llm_response JSONB`, `model`, `prompt_version`, `tokens_in`, `tokens_out`, `cost NUMERIC(12,8) NULL`; index `(user_id, created_at DESC)` | Architecture §7. `llm_response` (with the lessons) allows auditing prompt versions without paying again. The index serves `GetHistory` |
 
 | Decision | Why |
 | --- | --- |
@@ -207,7 +172,7 @@ Runs only when `source_language == en`. For `uk`/`ru` the model's changes pass t
 
 | Decision | Why |
 | --- | --- |
-| Ports `IdentityRepository.get_or_create_user(provider, external_id) -> UUID` and `InteractionRepository.add(...)` in `domain/ports.py`; SQLAlchemy adapters in `infra/db/` | AGENTS.md port and adapter rule; use cases unit-tested with fakes |
+| Ports `IdentityRepository.get_or_create_user(provider, external_id) -> UUID` and `InteractionRepository.add(interaction)` in `domain/ports.py`; SQLAlchemy adapters in `infra/db/` | AGENTS.md port and adapter rule; use cases unit-tested with fakes |
 | Find-or-create: `INSERT … ON CONFLICT DO NOTHING`, then `SELECT` | A user's first two messages can arrive at once; read-then-insert would crash one on the unique constraint |
 | Each repository method is one transaction and commits itself; no unit-of-work port yet | Each write covers one aggregate. A unit of work earns its place when a use case writes two aggregates atomically (possibly `usage_daily` in Access) |
 | `async_sessionmaker(expire_on_commit=False)` built in `create_app()`, on `app.state`; request-scoped session via `Depends` | AGENTS.md shared-object pattern |
@@ -226,18 +191,16 @@ Runs only when `source_language == en`. For `uk`/`ru` the model's changes pass t
 ```
 POST /v1/texts/process
   transport/auth.py     headers → authenticate() → AuthContext                  (commits)
-  transport/texts.py    ProcessTextRequest → RewriteRequest
+  transport/texts.py    ProcessTextRequest.text
   application/process_text.py
-      rewriter.rewrite(request)              → RewriteOutcome   (≤ 60 s, 1 retry)
-      en:    changes = reconcile(diff(input, output), outcome.changes)
-      uk/ru: changes = model changes, span=None
-      interactions.add(...)                  (one transaction: interaction + corrections)
+      rewriter.rewrite(text)                 → RewriteOutcome   (≤ 60 s, 1 retry)
+      interactions.add(Interaction(...))     (one transaction)
   transport             ProcessedText → ProcessTextResponse
 ```
 
 | Decision | Why |
 | --- | --- |
-| `process_text(auth, request, rewriter, interactions) -> ProcessedText`, a function taking ports | The `check_readiness` pattern |
+| `process_text(auth, text, rewriter, interactions) -> ProcessedText`, a function taking ports | The `check_readiness` pattern |
 | Interaction id generated in the use case (UUIDv7) | The use case builds the response that carries it; no round trip to learn our own id |
 | Nothing saved when the rewrite fails | There is no result; tokens are already logged |
 | `RewriteFailed` → `502 llm_unavailable`, logged once in the transport handler with `reason` | AGENTS.md: log an error once, where it is handled |
@@ -250,16 +213,14 @@ POST /v1/texts/process
 
 | Level | Cases | Why |
 | --- | --- | --- |
-| Contracts | Round trip; blank text rejected; 4096 characters accepted, 4097 rejected | Boundaries the bot relies on |
-| Unit: enum parity | `Mode`, `Language`, `Category` equal in contracts and domain | AGENTS.md rule 5 |
-| Unit: diff | Table-driven: comma insert, article insert, replacement, deletion, `dont → don't`, curly apostrophe, whitespace-only (no change), repeated words, emoji before an edit, a 300-token text (`autojunk` regression), identical text | One row per decision in §7 |
-| Unit: reconcile | Exact match, containment with extra context, empty-side rule, unexplained → `other`, invented change dropped, two model changes in one hunk | One row per rule in §7 |
-| Unit: use case | Fakes: EN path saves spans; UK path skips the diff; failure saves nothing | Use case requirements, no Docker |
+| Contracts | Request is only `text` and ignores unknown fields; response round trip with exactly its four fields; blank text rejected; 4096 characters accepted, 4097 rejected | Boundaries the bot relies on |
+| Unit: enum parity | `Language` equal in contracts and domain | AGENTS.md rule 5 |
+| Unit: use case | Fakes: the outcome is returned and saved with the input text; a translation without lessons; failure saves nothing | Use case requirements, no Docker |
 | Unit: authenticate | Same identity twice → same user | Find-or-create contract |
-| Unit: adapter | `httpx2.MockTransport`: valid; invalid then valid (corrective message sent, usage summed); invalid twice → `RewriteFailed`; timeout and non-2xx → `RewriteFailed`; missing cost header → `cost=None`; bearer key and `engleks-rewrite` model sent; user text absent from the system message | §6 decisions |
-| Integration: Postgres | Concurrent find-or-create via `asyncio.gather` → one user; interaction with corrections round-trips; existing `alembic check` passes | Only a real database proves `ON CONFLICT` and model/migration parity |
-| Integration: HTTP | `client_for(create_app(pg_settings))`, fake rewriter: 401 without or with a wrong token, 401 with a bad user id, 422 blank text, 502 on failure, 200 with rows saved | Endpoint contract end to end, no LLM |
-| `@pytest.mark.llm` | Through the running proxy: English text with known errors → valid result with at least one explained change; UA text → `source_language = uk`; stored `model` is the upstream model, not the alias | Proves prompt, schema and proxy hop with real models; asserts structure, not wording |
+| Unit: adapter | `httpx2.MockTransport`: valid; invalid then valid (corrective message sent, usage summed); invalid twice → `RewriteFailed`; timeout and non-2xx → `RewriteFailed`; missing cost header → `cost=None`; bearer key and `engleks-rewrite` model sent; user text absent from the system message; the system message is the v3 template verbatim | §6 decisions |
+| Integration: Postgres | Concurrent find-or-create via `asyncio.gather` → one user; interaction round-trips; `alembic check` passes; the schema has exactly `app_user`, `identity`, `interaction` | Only a real database proves `ON CONFLICT` and model/migration parity |
+| Integration: HTTP | `client_for(create_app(pg_settings))`, fake rewriter: 401 without or with a wrong token, 401 with a bad user id, 422 blank text, 502 on failure, 200 with rows saved, 200 when an old client sends extra fields | Endpoint contract end to end, no LLM |
+| `@pytest.mark.llm` | Through the running proxy: English text with known errors → corrected text with 1–5 lessons; UA text → `source_language = uk`; stored `model` is the upstream model, not the alias | Proves prompt, schema and proxy hop with real models; asserts structure, not wording |
 
 ## 11. Configuration, Compose and docs changes
 
@@ -280,7 +241,7 @@ Updated in the same change:
 - `deploy/litellm/config.yaml` (§6).
 - `.env.example`: `API_SERVICE_TOKEN`, `API_LLM_BASE_URL`, `API_LLM_MODEL`, `API_LLM_API_KEY`, `API_LLM_TIMEOUT_S`, and the proxy's `LLM_UPSTREAM_MODEL`, `LLM_UPSTREAM_API_BASE`, master key, DB password, UI credentials, `OPENAI_API_KEY`.
 - `README.md`: dev setup gains pulling the Ollama model, recreating the dev volume once, and `make llm-key`.
-- `docs/architecture.md`: `user` → `app_user`, the category list, the response shape.
+- `docs/architecture.md`: `user` → `app_user`, the response shape.
 - `docs/architecture.md` also: the LiteLLM proxy in the component diagram and in §9 Deployment (add `litellm` to `api`, `bot` and `postgres`, plus `ollama` in dev).
 - `AGENTS.md`: the first repository, LLM adapter (via the proxy) and auth dependency patterns (its "keeping this file current" rule).
 
@@ -290,5 +251,5 @@ Updated in the same change:
 - `make scan` (filesystem and LiteLLM image) reports no fixable findings.
 - The API container cannot resolve or reach `ollama`.
 - The LiteLLM Admin UI is reachable on `127.0.0.1:4000/ui` and shows the `engleks-rewrite` model and the API's virtual key.
-- With `make up`, a `curl` to `/v1/texts/process` with valid headers returns explained, positioned changes for English input and a translation for Ukrainian input, and the rows are in `interaction` and `correction`.
+- With `make up`, a `curl` to `/v1/texts/process` with valid headers returns a correction with lessons for English input and a translation for Ukrainian input, and the rows are in `interaction`.
 - No log line contains the user's text or the model's output.
