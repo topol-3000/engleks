@@ -110,6 +110,8 @@ Never add an import-linter exception to get green; change the design instead.
   everything else gets values or adapters passed in.
 - Secrets are `SecretStr`, read from `/run/secrets` in containers and from `.env` locally.
 - LLM output is always parsed into a Pydantic model; raw LLM text never reaches the domain.
+- The user's text goes to the LLM only as the user message, wrapped verbatim in `<text>` tags;
+  instructions to the model (including the retry's schema correction) are system messages.
 - The API calls LLMs only through the LiteLLM proxy, never a provider or Ollama directly,
   and never depends on the `litellm` package.
 - Migrations run in the `migrate` Compose service, never on API startup. A test runs

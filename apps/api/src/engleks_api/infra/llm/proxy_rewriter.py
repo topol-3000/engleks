@@ -16,7 +16,7 @@ from engleks_api.infra.llm.schema import LLMRewrite
 
 log = structlog.stdlib.get_logger()
 
-PROMPT_VERSION = "process_text.v3"
+PROMPT_VERSION = "process_text.v5"
 _TEMPERATURE = 0.2
 
 _prompts = Environment(
@@ -80,21 +80,23 @@ class ProxyRewriter:
 
     async def rewrite(self, text: str) -> RewriteOutcome:
         system = _prompts.get_template(f"{PROMPT_VERSION}.j2").render()
-        # The user's text is only ever the user message, so it stays data.
+        # The user's text is only ever the user message, in the <text> tags the prompt
+        # expects, so it stays data. It is sent verbatim, never escaped.
         messages: list[dict[str, str]] = [
             {"role": "system", "content": system},
-            {"role": "user", "content": text},
+            {"role": "user", "content": f"<text>{text}</text>"},
         ]
         first = await self._call(messages, attempt=1)
         attempts = [first]
         try:
             parsed = LLMRewrite.model_validate_json(first.content)
         except ValidationError as exc:
-            # A plain resend at low temperature tends to repeat the mistake.
+            # A plain resend at low temperature tends to repeat the mistake. The correction
+            # is a system message: the prompt reads every user message as text to edit.
             messages += [
                 {"role": "assistant", "content": first.content},
                 {
-                    "role": "user",
+                    "role": "system",
                     "content": "Your reply did not match the required JSON schema: "
                     f"{exc}. Reply again with only the corrected JSON.",
                 },

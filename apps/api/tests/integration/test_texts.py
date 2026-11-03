@@ -25,7 +25,7 @@ class FakeRewriter:
             source_language=Language.EN,
             output_text="He goes home.",
             explanations=["Add -s to the verb after he, she or it."],
-            usage=Usage("ollama_chat/gemma3:4b", "process_text.v3", 10, 5, Decimal("0.0001")),
+            usage=Usage("ollama_chat/gemma3:4b", "process_text.v5", 10, 5, Decimal("0.0001")),
             llm_response={"source_language": "en"},
         )
         self.fail_with: RewriteFailed | None = None

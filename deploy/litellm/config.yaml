@@ -16,6 +16,7 @@ model_list:
     litellm_params:
       model: anthropic/claude-haiku-5-5
       drop_params: true   # same as sonnet: drop what the model doesn't accept
+      reasoning_effort: high   # its default is medium
   - model_name: mistral-small
     litellm_params:
       model: ollama_chat/mistral-small:latest
