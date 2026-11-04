@@ -5,6 +5,7 @@ A second composition root next to main.py. Its output is the product, so it uses
 """
 
 import asyncio
+import sys
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ from engleks_api.infra.db.repositories import (
     SqlInviteRepository,
     SqlUserAdminRepository,
 )
+from engleks_api.logging_setup import configure_logging
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,8 @@ def build_cli(settings: Settings | None = None) -> typer.Typer:
     async def repositories() -> AsyncGenerator[tuple[_Repositories, Settings]]:
         # Built only when a command runs, so `--help` needs no environment.
         resolved = settings or Settings()  # pyright: ignore[reportCallIssue]
+        # stdout carries the command's output (scripts do `code=$(make invite)`): logs go to stderr.
+        configure_logging(resolved.log_format, resolved.log_level, stream=sys.stderr)
         engine = build_engine(resolved.database_url())
         sessions = build_sessionmaker(engine)
         try:

@@ -1,6 +1,6 @@
 import logging
 import sys
-from typing import Literal
+from typing import Literal, TextIO
 
 import structlog
 
@@ -15,8 +15,13 @@ class _DropUvicornAppException(logging.Filter):
         return not duplicate
 
 
-def configure_logging(log_format: Literal["json", "console"], log_level: str) -> None:
-    """Render structlog and stdlib logging (uvicorn, alembic, libraries) through one handler."""
+def configure_logging(
+    log_format: Literal["json", "console"], log_level: str, stream: TextIO | None = None
+) -> None:
+    """Render structlog and stdlib logging (uvicorn, alembic, libraries) through one handler.
+
+    Logs go to `stream`, stdout by default; the admin CLI passes stderr to keep stdout for output.
+    """
     global _handler
     level = logging.getLevelNamesMapping()[log_level.upper()]
     shared: list[structlog.typing.Processor] = [
@@ -37,7 +42,7 @@ def configure_logging(log_format: Literal["json", "console"], log_level: str) ->
         wrapper_class=structlog.make_filtering_bound_logger(level),
         logger_factory=structlog.stdlib.LoggerFactory(),
     )
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(stream or sys.stdout)
     handler.setFormatter(
         structlog.stdlib.ProcessorFormatter(
             foreign_pre_chain=[*shared, structlog.stdlib.ExtraAdder()],
