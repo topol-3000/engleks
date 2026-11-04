@@ -80,8 +80,8 @@ sequenceDiagram
 
 Errors:
 
-- `401`: unknown user, invite required.
-- `403`: user disabled.
+- `401`: `unauthorized` (bad bot token or user id) or `invite_required` (unknown user).
+- `403`: `user_disabled`.
 - `429`: `rate_limit` or `daily_budget`.
 - `502`: LLM failure.
 

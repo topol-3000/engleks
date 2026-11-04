@@ -4,8 +4,8 @@ from uuid import uuid4
 import pytest
 
 from engleks_api.application.process_text import process_text
+from engleks_api.domain.access import AuthContext, Limits
 from engleks_api.domain.text_processing import (
-    AuthContext,
     Interaction,
     Language,
     RewriteFailed,
@@ -13,7 +13,7 @@ from engleks_api.domain.text_processing import (
     Usage,
 )
 
-AUTH = AuthContext(user_id=uuid4())
+AUTH = AuthContext(user_id=uuid4(), limits=Limits(10, 200000))
 
 
 def outcome(lang: Language, output_text: str, explanations: list[str]) -> RewriteOutcome:

@@ -1,9 +1,7 @@
-import uuid
-
-from sqlalchemy import insert, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from engleks_api.domain.access import UserAccess, UserStatus
 from engleks_api.domain.text_processing import Interaction, Provider
 from engleks_api.infra.db.models import IdentityRow, InteractionRow, UserRow
 
@@ -15,36 +13,24 @@ class SqlIdentityRepository:
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
 
-    async def get_or_create_user(self, provider: Provider, external_id: str) -> uuid.UUID:
-        select_user = select(IdentityRow.user_id).where(
-            IdentityRow.provider == provider.value, IdentityRow.external_id == external_id
+    async def find_user(self, provider: Provider, external_id: str) -> UserAccess | None:
+        query = (
+            select(
+                UserRow.id,
+                UserRow.status,
+                UserRow.rate_limit_per_minute,
+                UserRow.daily_token_budget,
+            )
+            .join(IdentityRow, IdentityRow.user_id == UserRow.id)
+            .where(IdentityRow.provider == provider.value, IdentityRow.external_id == external_id)
         )
         async with self._sessions() as session:
-            if (found := await session.scalar(select_user)) is not None:
-                return found
-            # A user's first two messages can arrive at once: insert-or-nothing, and
-            # roll back our user row if another request created the identity first.
-            user_id = uuid.uuid7()
-            await session.execute(insert(UserRow).values(id=user_id))
-            inserted = await session.scalar(
-                pg_insert(IdentityRow)
-                .values(
-                    id=uuid.uuid7(),
-                    user_id=user_id,
-                    provider=provider.value,
-                    external_id=external_id,
-                )
-                .on_conflict_do_nothing(index_elements=["provider", "external_id"])
-                .returning(IdentityRow.user_id)
-            )
-            if inserted is not None:
-                await session.commit()
-                return user_id
-            await session.rollback()
-            winner = await session.scalar(select_user)
-            if winner is None:
-                raise RuntimeError("identity conflict but no identity row found")
-            return winner
+            row = (await session.execute(query)).one_or_none()
+        if row is None:
+            return None
+        return UserAccess(
+            row.id, UserStatus(row.status), row.rate_limit_per_minute, row.daily_token_budget
+        )
 
 
 class SqlInteractionRepository:

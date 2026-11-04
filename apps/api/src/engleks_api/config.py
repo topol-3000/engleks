@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     llm_model: str = "engleks-rewrite"
     llm_api_key: SecretStr
     llm_timeout_s: float = 60
+    # Per-user defaults; a user's own overrides take precedence.
+    rate_limit_per_minute: int = Field(default=10, ge=1)
+    daily_token_budget: int = Field(default=200000, ge=1)
     log_format: Literal["json", "console"] = "json"
     log_level: str = "INFO"
 

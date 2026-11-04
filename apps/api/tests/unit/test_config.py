@@ -53,3 +53,10 @@ def test_llm_defaults(monkeypatch):
         "engleks-rewrite",
         60,
     )
+
+
+def test_limit_defaults(monkeypatch):
+    for name in ("API_RATE_LIMIT_PER_MINUTE", "API_DAILY_TOKEN_BUDGET"):
+        monkeypatch.delenv(name, raising=False)
+    s = Settings(db_password=SecretStr("x"), **REQUIRED, _env_file=None)
+    assert (s.rate_limit_per_minute, s.daily_token_budget) == (10, 200000)

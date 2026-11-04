@@ -1,6 +1,6 @@
 from typing import Protocol
-from uuid import UUID
 
+from engleks_api.domain.access import UserAccess
 from engleks_api.domain.text_processing import (
     Interaction,
     Provider,
@@ -25,8 +25,8 @@ class TextRewriter(Protocol):
 
 
 class IdentityRepository(Protocol):
-    async def get_or_create_user(self, provider: Provider, external_id: str) -> UUID:
-        """Return the user behind this identity, creating both if new."""
+    async def find_user(self, provider: Provider, external_id: str) -> UserAccess | None:
+        """Return the user behind this identity, or None if the identity is unknown."""
         ...
 
 

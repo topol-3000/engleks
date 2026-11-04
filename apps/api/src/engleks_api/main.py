@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from engleks_api.config import Settings
+from engleks_api.domain.access import Limits
 from engleks_api.infra.db.engine import build_engine, build_sessionmaker
 from engleks_api.infra.db.probe import DatabaseProbe
 from engleks_api.infra.db.repositories import SqlIdentityRepository, SqlInteractionRepository
@@ -40,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.interactions = SqlInteractionRepository(sessions)
     app.state.rewriter = rewriter
     app.state.service_token = settings.service_token
+    app.state.default_limits = Limits(settings.rate_limit_per_minute, settings.daily_token_budget)
     app.add_middleware(RequestIdMiddleware)
     register_error_handlers(app)
     app.include_router(health.router)

@@ -1,7 +1,8 @@
 import uuid
 
+from engleks_api.domain.access import AuthContext
 from engleks_api.domain.ports import InteractionRepository, TextRewriter
-from engleks_api.domain.text_processing import AuthContext, Interaction, ProcessedText
+from engleks_api.domain.text_processing import Interaction, ProcessedText
 
 
 async def process_text(

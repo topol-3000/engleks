@@ -1,10 +1,7 @@
-import asyncio
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker
-
+from engleks_api.domain.access import UserAccess, UserStatus
 from engleks_api.domain.text_processing import (
     Interaction,
     Language,
@@ -31,30 +28,18 @@ def interaction(user_id: uuid.UUID) -> Interaction:
     return Interaction(uuid.uuid7(), user_id, "He go home, no?", outcome)
 
 
-async def test_get_or_create_is_stable(sessions):
-    repo = SqlIdentityRepository(sessions)
-    first = await repo.get_or_create_user(Provider.TELEGRAM, "1001")
-    assert await repo.get_or_create_user(Provider.TELEGRAM, "1001") == first
-    assert await repo.get_or_create_user(Provider.TELEGRAM, "1002") != first
+async def test_find_user_unknown_is_none(sessions):
+    assert await SqlIdentityRepository(sessions).find_user(Provider.TELEGRAM, "999001") is None
 
 
-async def test_concurrent_get_or_create_creates_one_user(engine):
-    # Real connections: one connection cannot run statements concurrently.
-    repo = SqlIdentityRepository(async_sessionmaker(engine, expire_on_commit=False))
-    external_id = str(uuid.uuid4().int % 10**12)
-    async with engine.connect() as c:
-        before = await c.scalar(text("SELECT count(*) FROM app_user"))
-    ids = await asyncio.gather(
-        *(repo.get_or_create_user(Provider.TELEGRAM, external_id) for _ in range(5))
-    )
-    async with engine.connect() as c:
-        after = await c.scalar(text("SELECT count(*) FROM app_user"))
-    assert len(set(ids)) == 1
-    assert after - before == 1
+async def test_find_user_returns_status_and_overrides(sessions, register):
+    user_id, ext = await register(sessions, status="disabled", rate_limit_per_minute=3)
+    found = await SqlIdentityRepository(sessions).find_user(Provider.TELEGRAM, ext)
+    assert found == UserAccess(user_id, UserStatus.DISABLED, 3, None)
 
 
-async def test_interaction_round_trip(sessions):
-    user_id = await SqlIdentityRepository(sessions).get_or_create_user(Provider.TELEGRAM, "2001")
+async def test_interaction_round_trip(sessions, register):
+    user_id, _ = await register(sessions)
     it = interaction(user_id)
     await SqlInteractionRepository(sessions).add(it)
     async with sessions() as s:

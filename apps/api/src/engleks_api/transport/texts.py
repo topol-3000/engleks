@@ -3,8 +3,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 
 from engleks_api.application.process_text import process_text
+from engleks_api.domain.access import AuthContext
 from engleks_api.domain.ports import InteractionRepository, TextRewriter
-from engleks_api.domain.text_processing import AuthContext
 from engleks_api.transport.auth import auth_context
 from engleks_contracts import ErrorResponse, ProcessTextRequest, ProcessTextResponse
 from engleks_contracts import Language as WireLanguage
@@ -24,6 +24,7 @@ def interaction_repository(request: Request) -> InteractionRepository:
     "/v1/texts/process",
     responses={
         401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
         502: {"model": ErrorResponse},
     },

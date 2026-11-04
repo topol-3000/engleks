@@ -42,11 +42,6 @@ class ProcessedText:
 
 
 @dataclass(frozen=True)
-class AuthContext:
-    user_id: UUID
-
-
-@dataclass(frozen=True)
 class Interaction:
     id: UUID
     user_id: UUID
