@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # Per-user defaults; a user's own overrides take precedence.
     rate_limit_per_minute: int = Field(default=10, ge=1)
     daily_token_budget: int = Field(default=200000, ge=1)
+    # The bot's @username without the @; lets the admin CLI print a t.me deep link.
+    bot_username: str | None = None
     log_format: Literal["json", "console"] = "json"
     log_level: str = "INFO"
 

@@ -126,3 +126,14 @@ async def test_same_user_concurrently_consumes_once(engine):
             {"e": ext},
         )
     assert (identities, users) == (1, 1)
+
+
+async def test_revoke_marks_the_invite_and_unknown_is_false(sessions):
+    repo = SqlInviteRepository(sessions)
+    code = generate_invite_code()
+    await repo.create(code, None, 1, None)
+    assert await repo.revoke(code) is True
+    assert await repo.revoke(code) is True
+    assert await repo.revoke("NOSUCHCODE0") is False
+    listed = {i.code: i for i in await repo.list_all()}
+    assert listed[code].revoked_at is not None

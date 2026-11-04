@@ -1,7 +1,14 @@
 from typing import Protocol
 from uuid import UUID
 
-from engleks_api.domain.access import Admission, Invite, Redemption, UserAccess
+from engleks_api.domain.access import (
+    Admission,
+    Invite,
+    Redemption,
+    UserAccess,
+    UserStatus,
+    UserSummary,
+)
 from engleks_api.domain.text_processing import (
     Interaction,
     Provider,
@@ -45,6 +52,35 @@ class InviteRepository(Protocol):
         Raise InvalidInvite if the code cannot be used. Return None, consuming nothing,
         if the identity already exists.
         """
+        ...
+
+    # Named list_all: a method named `list` would shadow the builtin in later annotations.
+    async def list_all(self) -> list[Invite]:
+        """Every invite, newest first."""
+        ...
+
+    async def revoke(self, code: str) -> bool:
+        """Revoke the code (keeping the time of an earlier revocation); False if unknown."""
+        ...
+
+
+class UserAdminRepository(Protocol):
+    async def list_with_usage(self) -> list[UserSummary]:
+        """Every Telegram user with today's requests and tokens (zero when there are none)."""
+        ...
+
+    async def set_status(self, provider: Provider, external_id: str, status: UserStatus) -> bool:
+        """Set the user's status; False if the identity is unknown."""
+        ...
+
+    async def set_limits(
+        self,
+        provider: Provider,
+        external_id: str,
+        rate_limit_per_minute: int | None,
+        daily_token_budget: int | None,
+    ) -> bool:
+        """Write both overrides as given (None = use the default); False if unknown."""
         ...
 
 

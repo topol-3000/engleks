@@ -31,6 +31,8 @@ The MVP is built as sub-projects, each with its own spec: **Foundation** (done),
 | New migration from models | `make revision m="add interaction"`, then review the file |
 | Full stack / stop it | `make up` / `make down` |
 | Trivy scan | `make scan` |
+| Create an invite (stack running) | `make invite [note=..] [uses=..] [days=..]` |
+| Any admin command (stack running) | `make admin a="user disable <id>"` |
 
 Run `make lint && make test` before saying a task is done. Add dependencies with
 `uv add --package engleks-api <pkg>` (or `engleks-bot`, `engleks-contracts`); dev tools go
@@ -42,6 +44,7 @@ in the root `dev` group with `uv add --dev <pkg>`. Never use pip.
 apps/api/src/engleks_api/
   main.py          create_app(): composition root, the only place infra is wired in
   config.py        Settings (API_ prefix)
+  cli.py           engleks-admin (Typer): second composition root, wires infra into the admin use cases
   transport/       routers, FastAPI dependencies, error → HTTP mapping
   admin/           admin pages mounted at /admin
   application/     use cases, one module each
@@ -86,6 +89,7 @@ Never add an import-linter exception to get green; change the design instead.
 | a business concept or rule | `domain/`: frozen dataclass, `StrEnum` |
 | to talk to something external | port (`Protocol`) in `domain/ports.py`, adapter in `infra/` |
 | an operation the API performs | `application/<verb>_<noun>.py`, a function taking ports as arguments (see `check_readiness.py`) |
+| an admin command | a use case in `application/`, a Typer command in `cli.py` |
 | an HTTP endpoint | `transport/<feature>.py` (router), `include_router` in `create_app()` |
 | a shared object (engine, client, adapter) | built in `create_app()`, stored on `app.state`, read by a `Depends` provider in `transport/` |
 | a request or response body | `packages/contracts`, used by both the API and the bot |
@@ -123,6 +127,7 @@ Never add an import-linter exception to get green; change the design instead.
 ## Logging
 
 - `log = structlog.stdlib.get_logger()` at module level. Never `print`.
+  `cli.py` writes its output with `typer.echo`; that is output, not logging, so the `print` rule does not apply.
 - Events are snake_case names with key-value fields, not prose:
   `log.warning("readiness_probe_failed", probe=probe.name, error=repr(exc))`.
 - Never log secrets, the user's text or the LLM's output. Log ids, lengths and counts instead.

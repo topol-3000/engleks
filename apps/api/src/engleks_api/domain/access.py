@@ -104,3 +104,15 @@ class Invite:
 class Redemption:
     user_id: UUID
     invite_code_id: UUID
+
+
+@dataclass(frozen=True)
+class UserSummary:
+    """One row of the admin's user list; overrides are `None` where the default applies."""
+
+    external_id: str
+    status: UserStatus
+    rate_limit_per_minute: int | None
+    daily_token_budget: int | None
+    requests_today: int
+    tokens_today: int

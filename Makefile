@@ -1,4 +1,4 @@
-.PHONY: install lint fmt test test-llm migrate revision dev-db up down scan litellm-image llm-key
+.PHONY: install lint fmt test test-llm migrate revision dev-db up down scan litellm-image llm-key invite admin
 install:
 	uv sync --all-packages
 	uv run pre-commit install
@@ -39,3 +39,8 @@ litellm-image:
 # Prints the API's virtual key for .env (API_LLM_API_KEY). Needs the litellm service running.
 llm-key:
 	docker compose exec litellm python /deploy/generate_key.py
+# Run engleks-admin in the running api container.
+invite:
+	docker compose exec api engleks-admin invite create $(if $(note),--note "$(note)") $(if $(uses),--uses $(uses)) $(if $(days),--days $(days))
+admin:
+	docker compose exec api engleks-admin $(a)

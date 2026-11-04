@@ -36,7 +36,7 @@ flowchart LR
 **Application (use cases)**:
 
 - User: `ProcessText` (Improve/Translate), `ManageProfiles`, `GetHistory`, `RedeemInvite`.
-- Admin: `ListUsers`, `SetUserStatus`, `SetUserLimits`, `CreateInvite`, `RevokeInvite`, `UsageStats`.
+- Admin: `ListUsers`, `SetUserStatus`, `SetUserLimits`, `CreateInvite`, `RevokeInvite`, `UsageStats`. Until the dashboard exists, the `engleks-admin` CLI (`make invite`, `make admin a="..."`) runs them.
 
 **LLM Gateway**:
 
@@ -104,6 +104,8 @@ Errors:
 - **Users**: status, last activity, requests and tokens for today and the last 7 days. Actions: enable or disable a user, set limits.
 - **Invite codes**: create, revoke, see who redeemed them.
 - **Overview**: active users, requests and LLM cost per day.
+
+The dashboard calls the same admin use cases as the `engleks-admin` CLI; it adds no logic of its own.
 
 ## 7. Data
 

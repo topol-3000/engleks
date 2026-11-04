@@ -72,6 +72,7 @@ forbidden_modules = [
     "engleks_api.transport",
     "engleks_api.admin",
     "engleks_api.main",
+    "engleks_api.cli",
     "engleks_api.config",
 ]
 
@@ -134,6 +135,7 @@ source_modules = [
     "engleks_api.infra",
     "engleks_api.admin",
     "engleks_api.main",
+    "engleks_api.cli",
     "engleks_api.config",
 ]
 forbidden_modules = ["engleks_contracts"]

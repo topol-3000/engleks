@@ -41,6 +41,12 @@ class FakeInvites:
     ) -> Invite:
         raise NotImplementedError
 
+    async def list_all(self) -> list[Invite]:
+        raise NotImplementedError
+
+    async def revoke(self, code: str) -> bool:
+        raise NotImplementedError
+
     async def redeem(self, code: str, provider: Provider, external_id: str) -> Redemption | None:
         self.codes.append(code)
         if self.fail_with is not None:

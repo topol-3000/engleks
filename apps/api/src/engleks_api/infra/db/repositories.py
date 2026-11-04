@@ -13,6 +13,7 @@ from engleks_api.domain.access import (
     Redemption,
     UserAccess,
     UserStatus,
+    UserSummary,
 )
 from engleks_api.domain.text_processing import Interaction, Provider, Usage
 from engleks_api.infra.db.models import (
@@ -107,6 +108,23 @@ class SqlInviteRepository:
                 return None
             await session.commit()
             return Redemption(user.id, invite_id)
+
+    async def list_all(self) -> list[Invite]:
+        async with self._sessions() as session:
+            rows = await session.scalars(
+                select(InviteCodeRow).order_by(InviteCodeRow.created_at.desc())
+            )
+            return [_invite(row) for row in rows]
+
+    async def revoke(self, code: str) -> bool:
+        stmt = (
+            update(InviteCodeRow)
+            .where(InviteCodeRow.code == code)
+            .values(revoked_at=func.coalesce(InviteCodeRow.revoked_at, func.now()))
+            .returning(InviteCodeRow.id)
+        )
+        async with self._sessions.begin() as session:
+            return await session.scalar(stmt) is not None
 
 
 async def _rejection(session: AsyncSession, code: str) -> InviteRejection:
@@ -221,3 +239,81 @@ class SqlUsageLedger:
         )
         async with self._sessions.begin() as session:
             await session.execute(upsert)
+
+
+class SqlUserAdminRepository:
+    """Admin reads and writes, addressing users by provider and external id."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def list_with_usage(self) -> list[UserSummary]:
+        query = (
+            select(
+                IdentityRow.external_id,
+                UserRow.status,
+                UserRow.rate_limit_per_minute,
+                UserRow.daily_token_budget,
+                func.coalesce(UsageDailyRow.requests, 0).label("requests_today"),
+                func.coalesce(UsageDailyRow.tokens_in + UsageDailyRow.tokens_out, 0).label(
+                    "tokens_today"
+                ),
+            )
+            .select_from(IdentityRow)
+            .join(UserRow, UserRow.id == IdentityRow.user_id)
+            .outerjoin(
+                UsageDailyRow,
+                (UsageDailyRow.user_id == UserRow.id) & (UsageDailyRow.day == _TODAY_UTC),
+            )
+            .where(IdentityRow.provider == Provider.TELEGRAM.value)
+            .order_by(UserRow.created_at)
+        )
+        async with self._sessions() as session:
+            rows = (await session.execute(query)).all()
+        return [
+            UserSummary(
+                r.external_id,
+                UserStatus(r.status),
+                r.rate_limit_per_minute,
+                r.daily_token_budget,
+                r.requests_today,
+                r.tokens_today,
+            )
+            for r in rows
+        ]
+
+    async def set_status(self, provider: Provider, external_id: str, status: UserStatus) -> bool:
+        return await self._update_user(provider, external_id, status=status.value)
+
+    async def set_limits(
+        self,
+        provider: Provider,
+        external_id: str,
+        rate_limit_per_minute: int | None,
+        daily_token_budget: int | None,
+    ) -> bool:
+        return await self._update_user(
+            provider,
+            external_id,
+            rate_limit_per_minute=rate_limit_per_minute,
+            daily_token_budget=daily_token_budget,
+        )
+
+    async def _update_user(
+        self, provider: Provider, external_id: str, **values: str | int | None
+    ) -> bool:
+        stmt = (
+            update(UserRow)
+            .where(
+                UserRow.id
+                == select(IdentityRow.user_id)
+                .where(
+                    IdentityRow.provider == provider.value, IdentityRow.external_id == external_id
+                )
+                .scalar_subquery()
+            )
+            .values(**values)
+            .returning(UserRow.id)
+        )
+        async with self._sessions.begin() as session:
+            return await session.scalar(stmt) is not None
