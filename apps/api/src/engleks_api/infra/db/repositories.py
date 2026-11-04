@@ -1,10 +1,12 @@
-from uuid import uuid7
+from decimal import Decimal
+from uuid import UUID, uuid7
 
-from sqlalchemy import func, select, update
+from sqlalchemy import Date, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from engleks_api.domain.access import (
+    Admission,
     InvalidInvite,
     Invite,
     InviteRejection,
@@ -12,8 +14,15 @@ from engleks_api.domain.access import (
     UserAccess,
     UserStatus,
 )
-from engleks_api.domain.text_processing import Interaction, Provider
-from engleks_api.infra.db.models import IdentityRow, InteractionRow, InviteCodeRow, UserRow
+from engleks_api.domain.text_processing import Interaction, Provider, Usage
+from engleks_api.infra.db.models import (
+    IdentityRow,
+    InteractionRow,
+    InviteCodeRow,
+    RateLimitRow,
+    UsageDailyRow,
+    UserRow,
+)
 
 # Each method opens its own session and is one transaction, so no connection is held
 # between calls (in particular, not during the LLM call).
@@ -153,3 +162,62 @@ class SqlInteractionRepository:
                     cost=usage.cost,
                 )
             )
+
+
+_TODAY_UTC = func.cast(func.timezone("UTC", func.now()), Date)
+
+
+class SqlUsageLedger:
+    """Counts with upserts on the database's clock; the use case decides what is too much."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def admit(self, user_id: UUID) -> Admission:
+        window = func.date_trunc("minute", func.now())
+        insert = pg_insert(RateLimitRow).values(user_id=user_id, window_start=window, count=1)
+        upsert = insert.on_conflict_do_update(
+            index_elements=["user_id"],
+            set_={
+                "count": case(
+                    (
+                        RateLimitRow.window_start == insert.excluded.window_start,
+                        RateLimitRow.count + 1,
+                    ),
+                    else_=1,
+                ),
+                "window_start": insert.excluded.window_start,
+            },
+        ).returning(RateLimitRow.count)
+        tokens = select(func.coalesce(UsageDailyRow.tokens_in + UsageDailyRow.tokens_out, 0)).where(
+            UsageDailyRow.user_id == user_id, UsageDailyRow.day == _TODAY_UTC
+        )
+        async with self._sessions.begin() as session:
+            count = await session.scalar(upsert)
+            tokens_today = await session.scalar(tokens)
+        return Admission(requests_this_minute=count or 0, tokens_today=tokens_today or 0)
+
+    async def record(self, user_id: UUID, usage: Usage | None) -> None:
+        # No reply means nothing was reported: zero tokens, zero cost. A call whose cost is
+        # unknown makes the day's cost NULL (NULL + x is NULL), which is the rule.
+        tokens_in, tokens_out = (0, 0) if usage is None else (usage.tokens_in, usage.tokens_out)
+        cost = Decimal(0) if usage is None else usage.cost
+        insert = pg_insert(UsageDailyRow).values(
+            user_id=user_id,
+            day=_TODAY_UTC,
+            requests=1,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost=cost,
+        )
+        upsert = insert.on_conflict_do_update(
+            index_elements=["user_id", "day"],
+            set_={
+                "requests": UsageDailyRow.requests + insert.excluded.requests,
+                "tokens_in": UsageDailyRow.tokens_in + insert.excluded.tokens_in,
+                "tokens_out": UsageDailyRow.tokens_out + insert.excluded.tokens_out,
+                "cost": UsageDailyRow.cost + insert.excluded.cost,
+            },
+        )
+        async with self._sessions.begin() as session:
+            await session.execute(upsert)

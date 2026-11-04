@@ -179,4 +179,52 @@ async def test_disabled_user_403(api, engine, register):
 
 async def test_openapi_declares_error_responses(app):
     responses = app.openapi()["paths"][URL]["post"]["responses"]
-    assert {"401", "403", "422", "502"} <= responses.keys()
+    assert {"401", "403", "422", "429", "502"} <= responses.keys()
+
+
+async def usage_row(engine, user_id):
+    async with engine.connect() as c:
+        return (
+            await c.execute(
+                text("SELECT requests, tokens_in, tokens_out FROM usage_daily WHERE user_id = :u"),
+                {"u": user_id},
+            )
+        ).one_or_none()
+
+
+async def test_rate_limit_429(api, register, engine):
+    client, fake = api
+    _, ext = await register(users(engine), rate_limit_per_minute=1)
+    first = await client.post(URL, json={"text": "a"}, headers=headers(ext))
+    assert first.status_code == 200
+    r = await client.post(URL, json={"text": "b"}, headers=headers(ext))
+    assert (r.status_code, r.json()) == (
+        429,
+        {"code": "rate_limited", "message": "Too many requests"},
+    )
+    assert len(fake.texts) == 1
+
+
+async def test_daily_budget_429(api, register, engine):
+    client, fake = api
+    _, ext = await register(users(engine), daily_token_budget=15)
+    first = await client.post(URL, json={"text": "a"}, headers=headers(ext))
+    assert first.status_code == 200
+    r = await client.post(URL, json={"text": "b"}, headers=headers(ext))
+    assert (r.status_code, r.json()) == (
+        429,
+        {"code": "daily_budget", "message": "Daily budget exhausted"},
+    )
+    assert len(fake.texts) == 1
+
+
+async def test_llm_failure_records_usage(api, register, engine):
+    client, fake = api
+    user_id, ext = await register(users(engine))
+    fake.fail_with = RewriteFailed(
+        "invalid_output", usage=Usage("m", "process_text.v5", 7, 3, None)
+    )
+    r = await client.post(URL, json={"text": "a"}, headers=headers(ext))
+    assert r.status_code == 502
+    assert tuple(await usage_row(engine, user_id)) == (1, 7, 3)
+    assert await count_interactions(engine, ext) == 0

@@ -93,6 +93,7 @@ Never add an import-linter exception to get green; change the design instead.
 | a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret |
 | a DB table | model on `Base` in `infra/db/` + `make revision m="..."` |
 | a repository | port in `domain/ports.py`, adapter in `infra/db/repositories.py` that takes the `async_sessionmaker` and opens one session and transaction per method (see `SqlInteractionRepository`); built in `create_app()`, never in `transport` |
+| a per-user counter or quota | port like `UsageLedger` (the adapter counts with an upsert and the DB clock; the use case decides), adapter in `infra/db/repositories.py` |
 | an LLM-backed task | task-level port in `domain/ports.py` (e.g. `TextRewriter`), adapter in `infra/llm/` that calls only the LiteLLM proxy over `httpx2` and validates the output into an infra Pydantic model (see `ProxyRewriter`) |
 | a prompt | `infra/llm/prompts/<name>.v<N>.j2`; a changed prompt is a new version, never an edit |
 | an endpoint that needs the caller | `auth: Annotated[AuthContext, Depends(auth_context)]` from `transport/auth.py`; use cases receive `AuthContext`, never headers |

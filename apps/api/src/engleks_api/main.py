@@ -11,6 +11,7 @@ from engleks_api.infra.db.repositories import (
     SqlIdentityRepository,
     SqlInteractionRepository,
     SqlInviteRepository,
+    SqlUsageLedger,
 )
 from engleks_api.infra.llm.proxy_rewriter import ProxyRewriter
 from engleks_api.logging_setup import configure_logging
@@ -44,6 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.identities = SqlIdentityRepository(sessions)
     app.state.invites = SqlInviteRepository(sessions)
     app.state.interactions = SqlInteractionRepository(sessions)
+    app.state.ledger = SqlUsageLedger(sessions)
     app.state.rewriter = rewriter
     app.state.service_token = settings.service_token
     app.state.default_limits = Limits(settings.rate_limit_per_minute, settings.daily_token_budget)

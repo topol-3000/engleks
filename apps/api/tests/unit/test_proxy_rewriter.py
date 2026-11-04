@@ -169,6 +169,43 @@ async def test_transport_and_envelope_failures(handler, reason):
     with pytest.raises(RewriteFailed) as e:
         await make(handler).rewrite(TEXT)
     assert e.value.reason == reason
+    assert e.value.usage is None
+
+
+async def test_invalid_twice_usage_is_both_attempts():
+    replies = [completion("not json", cost="0.0001"), completion("still not", cost="0.0002")]
+    with pytest.raises(RewriteFailed) as e:
+        await make(recording(replies, [])).rewrite(TEXT)
+    assert e.value.reason == "invalid_output"
+    assert e.value.usage is not None
+    assert (e.value.usage.tokens_in, e.value.usage.tokens_out, e.value.usage.cost) == (
+        200,
+        100,
+        Decimal("0.0003"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("second", "reason"),
+    [
+        (raises(httpx2.ReadTimeout("t")), "timeout"),
+        (lambda _: httpx2.Response(503), "http_503"),
+        (raises(httpx2.ConnectError("c")), "connection_error"),
+    ],
+)
+async def test_first_invalid_then_failure_usage_is_first_attempt(second, reason):
+    calls: list[int] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        calls.append(1)
+        return completion("not json") if len(calls) == 1 else second(request)
+
+    with pytest.raises(RewriteFailed) as e:
+        await make(handler).rewrite(TEXT)
+    assert e.value.reason == reason
+    assert e.value.usage is not None
+    assert (e.value.usage.tokens_in, e.value.usage.tokens_out) == (100, 50)
+    assert e.value.usage.prompt_version == "process_text.v5"
 
 
 async def test_model_falls_back_to_body_without_upstream_header():

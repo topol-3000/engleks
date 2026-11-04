@@ -1,10 +1,12 @@
 from typing import Protocol
+from uuid import UUID
 
-from engleks_api.domain.access import Invite, Redemption, UserAccess
+from engleks_api.domain.access import Admission, Invite, Redemption, UserAccess
 from engleks_api.domain.text_processing import (
     Interaction,
     Provider,
     RewriteOutcome,
+    Usage,
 )
 
 
@@ -49,4 +51,14 @@ class InviteRepository(Protocol):
 class InteractionRepository(Protocol):
     async def add(self, interaction: Interaction) -> None:
         """Store the interaction."""
+        ...
+
+
+class UsageLedger(Protocol):
+    async def admit(self, user_id: UUID) -> Admission:
+        """Count this request against the user's rate limit and report today's tokens so far."""
+        ...
+
+    async def record(self, user_id: UUID, usage: Usage | None) -> None:
+        """Add one LLM call to today's usage; None means the call reported no usage."""
         ...

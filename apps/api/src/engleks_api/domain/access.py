@@ -41,6 +41,22 @@ class UserAccess:
     daily_token_budget: int | None
 
 
+@dataclass(frozen=True)
+class Admission:
+    """What the ledger counted for one request: this request included."""
+
+    requests_this_minute: int
+    tokens_today: int
+
+
+class RateLimited(Exception):
+    pass
+
+
+class BudgetExhausted(Exception):
+    pass
+
+
 class InviteRequired(Exception):
     """The identity is unknown: the caller must redeem an invite code first."""
 

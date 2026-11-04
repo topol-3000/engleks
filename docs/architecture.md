@@ -82,7 +82,7 @@ Errors:
 
 - `401`: `unauthorized` (bad bot token or user id) or `invite_required` (unknown user).
 - `403`: `user_disabled`.
-- `429`: `rate_limit` or `daily_budget`.
+- `429`: `rate_limited` (too many requests in the current minute) or `daily_budget` (today's tokens are spent).
 - `502`: LLM failure.
 
 ## 4. Authentication (option A)
@@ -94,8 +94,8 @@ Errors:
 
 ## 5. Limits
 
-- Rate limit: N requests per minute per user. Counters in Postgres for the MVP, Redis later.
-- Daily token budget: checked before the LLM call and updated after it.
+- Rate limit: N requests per minute per user. Counters in Postgres for the MVP (`rate_limit`, one row per user, upserted on the database's clock), Redis later. A rejected request still counts toward the minute.
+- Daily token budget: the unit is tokens (`tokens_in + tokens_out`), summed in `usage_daily` and reset at 00:00 UTC. It is checked before the LLM call against tokens already spent, so the last call can overshoot it, and updated after the call. Failed calls count too: a call that fails after the model replied adds the tokens it used; one with no reply adds a request and no tokens.
 - Defaults are set in config. The typed nullable columns `rate_limit_per_minute` and `daily_token_budget` on `app_user` override them for one user.
 
 ## 6. Admin dashboard

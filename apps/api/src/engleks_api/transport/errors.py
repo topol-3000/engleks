@@ -3,7 +3,13 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from engleks_api.domain.access import InvalidInvite, InviteRequired, UserDisabled
+from engleks_api.domain.access import (
+    BudgetExhausted,
+    InvalidInvite,
+    InviteRequired,
+    RateLimited,
+    UserDisabled,
+)
 from engleks_api.domain.text_processing import RewriteFailed
 from engleks_api.transport.auth import Unauthorized
 from engleks_contracts import ErrorCode, ErrorResponse
@@ -37,6 +43,14 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(UserDisabled)
     async def user_disabled(request: Request, exc: UserDisabled) -> JSONResponse:
         return _error(403, ErrorCode.USER_DISABLED, "User disabled")
+
+    @app.exception_handler(RateLimited)
+    async def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
+        return _error(429, ErrorCode.RATE_LIMITED, "Too many requests")
+
+    @app.exception_handler(BudgetExhausted)
+    async def budget_exhausted(request: Request, exc: BudgetExhausted) -> JSONResponse:
+        return _error(429, ErrorCode.DAILY_BUDGET, "Daily budget exhausted")
 
     @app.exception_handler(RewriteFailed)
     async def rewrite_failed(request: Request, exc: RewriteFailed) -> JSONResponse:
