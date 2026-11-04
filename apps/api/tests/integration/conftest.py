@@ -1,8 +1,9 @@
 # pyright: reportCallIssue=false
 # Pyright cannot see pydantic-settings init options (_env_file, _secrets_dir).
-from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
+from uuid import UUID, uuid4, uuid7
 
 import httpx2
 import pytest
@@ -20,6 +21,7 @@ from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 
 from engleks_api.config import Settings
+from engleks_api.infra.db.models import IdentityRow, UserRow
 from engleks_api.main import create_app
 
 # Keep in sync with the postgres image in compose.yaml.
@@ -152,3 +154,41 @@ async def sessions(engine: AsyncEngine) -> AsyncIterator[async_sessionmaker[Asyn
             bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
         )
         await transaction.rollback()
+
+
+type Register = Callable[..., Awaitable[tuple[UUID, str]]]
+
+
+@pytest.fixture
+def register() -> Register:
+    """Insert and commit an active user with a Telegram identity; return (user_id, external_id)."""
+
+    async def _register(
+        sessions: async_sessionmaker[AsyncSession],
+        external_id: str | None = None,
+        *,
+        status: str = "active",
+        rate_limit_per_minute: int | None = None,
+        daily_token_budget: int | None = None,
+    ) -> tuple[UUID, str]:
+        # Valid for the X-Telegram-User-Id header regex: positive, no leading zero.
+        external_id = external_id or str(10**11 + uuid4().int % 10**11)
+        user_id = uuid7()
+        async with sessions.begin() as session:
+            session.add(
+                UserRow(
+                    id=user_id,
+                    status=status,
+                    rate_limit_per_minute=rate_limit_per_minute,
+                    daily_token_budget=daily_token_budget,
+                )
+            )
+            await session.flush()
+            session.add(
+                IdentityRow(
+                    id=uuid7(), user_id=user_id, provider="telegram", external_id=external_id
+                )
+            )
+        return user_id, external_id
+
+    return _register

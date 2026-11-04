@@ -71,3 +71,19 @@ def test_disabled_uvicorn_access_log_stays_disabled(capsys):
     configure_logging("json", "INFO")
     access.info('127.0.0.1 - "GET /readyz HTTP/1.1" 200')
     assert lines(capsys) == []
+
+
+def test_exception_logged_without_frame_locals(capsys):
+    configure_logging("json", "INFO")
+    log = structlog.get_logger()
+
+    def handle(code: str) -> None:
+        raise ValueError("boom")
+
+    try:
+        handle("SECRETINVITECODE")
+    except ValueError:
+        log.exception("unhandled")
+    out = capsys.readouterr().out
+    assert "SECRETINVITECODE" not in out
+    assert "ValueError" in out

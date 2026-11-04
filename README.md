@@ -38,5 +38,8 @@ docker compose up -d postgres
 docker compose exec postgres sh /docker-entrypoint-initdb.d/10-litellm.sh
 ```
 
+The bot is invite-only: run `make invite` and send yourself the printed code to get in.
+
+- [docs/access.md](docs/access.md): inviting people, managing users and limits
 - [AGENTS.md](AGENTS.md): commands, layout, rules and conventions
 - [docs/architecture.md](docs/architecture.md): MVP scope and architecture

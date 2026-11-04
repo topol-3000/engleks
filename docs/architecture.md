@@ -36,7 +36,7 @@ flowchart LR
 **Application (use cases)**:
 
 - User: `ProcessText` (Improve/Translate), `ManageProfiles`, `GetHistory`, `RedeemInvite`.
-- Admin: `ListUsers`, `SetUserStatus`, `SetUserLimits`, `CreateInvite`, `RevokeInvite`, `UsageStats`.
+- Admin: `ListUsers`, `SetUserStatus`, `SetUserLimits`, `CreateInvite`, `RevokeInvite`, `UsageStats`. Until the dashboard exists, the `engleks-admin` CLI (`make invite`, `make admin a="..."`) runs them.
 
 **LLM Gateway**:
 
@@ -80,23 +80,23 @@ sequenceDiagram
 
 Errors:
 
-- `401`: unknown user, invite required.
-- `403`: user disabled.
-- `429`: `rate_limit` or `daily_budget`.
+- `401`: `unauthorized` (bad bot token or user id) or `invite_required` (unknown user).
+- `403`: `user_disabled`.
+- `429`: `rate_limited` (too many requests in the current minute) or `daily_budget` (today's tokens are spent).
 - `502`: LLM failure.
 
 ## 4. Authentication (option A)
 
 - The bot and the API share a secret, `X-Bot-Token`. The bot also sends `X-Telegram-User-Id`.
-- Signup: `/start <code>` or a deep link → `POST /v1/auth/redeem {telegram_id, code}` → a user and an identity are created.
+- Signup: `/start <code>` or a deep link → `POST /v1/auth/redeem {code}` (the Telegram id comes from `X-Telegram-User-Id`) → a user and an identity are created.
 - Auth is isolated in an `AuthContext → user_id` layer, so use cases don't know about Telegram.
 - Possible later options: B (per-user JWT) and C (web login with Telegram Login or OIDC, plus account linking).
 
 ## 5. Limits
 
-- Rate limit: N requests per minute per user. Counters in Postgres for the MVP, Redis later.
-- Daily token budget: checked before the LLM call and updated after it.
-- Defaults are set in config. `app_user.limits_override` changes them for one user.
+- Rate limit: N requests per minute per user. Counters in Postgres for the MVP (`rate_limit`, one row per user, upserted on the database's clock), Redis later. A rejected request still counts toward the minute.
+- Daily token budget: the unit is tokens (`tokens_in + tokens_out`), summed in `usage_daily` and reset at 00:00 UTC. It is checked before the LLM call against tokens already spent, so the last call can overshoot it, and updated after the call. Failed calls count too: a call that fails after the model replied adds the tokens it used; one with no reply adds a request and no tokens.
+- Defaults are set in config. The typed nullable columns `rate_limit_per_minute` and `daily_token_budget` on `app_user` override them for one user.
 
 ## 6. Admin dashboard
 
@@ -105,20 +105,23 @@ Errors:
 - **Invite codes**: create, revoke, see who redeemed them.
 - **Overview**: active users, requests and LLM cost per day.
 
+The dashboard calls the same admin use cases as the `engleks-admin` CLI; it adds no logic of its own.
+
 ## 7. Data
 
 | Table | Purpose |
 | --- | --- |
-| `app_user` | status (active/disabled), `limits_override`. Not `user`: reserved in Postgres |
+| `app_user` | `status` (active/disabled), nullable overrides `rate_limit_per_minute` and `daily_token_budget`, `invite_code_id` → `invite_code`. Not `user`: reserved in Postgres |
 | `identity` | provider (telegram, later web), `external_id` → `app_user` |
-| `invite_code` | code, `created_by`, `max_uses`, `used_count`, `expires_at`, revoked |
+| `invite_code` | `code`, `note`, `max_uses`, `used_count`, `expires_at`, `revoked_at` |
 | `context_profile` | audience, tone, channel, glossary |
 | `interaction` | input, source language, output, full JSON response (with the lessons), model, prompt version, tokens, cost |
-| `usage_daily` | `user_id`, date, requests, `tokens_in`, `tokens_out`, cost |
+| `usage_daily` | `user_id`, `day`, requests, `tokens_in`, `tokens_out`, cost |
+| `rate_limit` | `user_id`, `window_start`, `count`: the current per-minute window counter |
 
 ## 8. API (draft)
 
-- `POST /v1/auth/redeem`
+- `POST /v1/auth/redeem`: request `{code}` (1–64 characters, matched case-insensitively); response `{status}`, `registered` or `already_registered`. Errors: `400 invalid_invite`, `401 unauthorized`, `403 user_disabled`
 - `POST /v1/texts/process`: request `{text}` (1–4096 characters, not blank); response
   `{interaction_id, source_language, output_text, explanations}`, where `explanations` are the lessons
 - `GET/POST/PATCH /v1/profiles`

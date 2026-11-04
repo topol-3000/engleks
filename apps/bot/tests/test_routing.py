@@ -9,10 +9,17 @@ from aiogram.exceptions import TelegramForbiddenError
 from aiogram.methods import SendMessage
 from aiogram.types import Update
 
-from engleks_bot.handlers.start import HELP_TEXT
+from engleks_bot.handlers.start import HELP_TEXT, WELCOME
 from engleks_bot.main import build_dispatcher
-from engleks_bot.rendering.errors import SEND_TEXT
-from engleks_contracts import Language, ProcessTextResponse
+from engleks_bot.rendering.errors import DISABLED, INVALID_INVITE, NEED_INVITE, SEND_TEXT
+from engleks_contracts import (
+    ErrorCode,
+    ErrorResponse,
+    Language,
+    ProcessTextResponse,
+    RedeemInviteResponse,
+    RedeemStatus,
+)
 
 USER = {"id": 1, "is_bot": False, "first_name": "User"}
 BOT_USER = {"id": 42, "is_bot": True, "first_name": "Engleks"}
@@ -41,8 +48,30 @@ def api_calls():
 
 
 @pytest.fixture
-def dispatcher(make_api, api_calls):
+def redeem_reply():
+    """What /v1/auth/redeem answers: a response DTO, or (status, ErrorResponse)."""
+    return {"value": RedeemInviteResponse(status=RedeemStatus.ALREADY_REGISTERED)}
+
+
+@pytest.fixture
+def process_reply():
+    """What /v1/texts/process answers instead of a success: (status, ErrorResponse) or None."""
+    return {"error": None}
+
+
+@pytest.fixture
+def dispatcher(make_api, api_calls, redeem_reply, process_reply):
     def handler(request):
+        if request.url.path == "/v1/auth/redeem":
+            api_calls.append(json.loads(request.content))
+            reply = redeem_reply["value"]
+            if isinstance(reply, RedeemInviteResponse):
+                return httpx2.Response(200, json=reply.model_dump(mode="json"))
+            status, error = reply
+            return httpx2.Response(status, json=error.model_dump(mode="json"))
+        if process_reply["error"] is not None:
+            status, error = process_reply["error"]
+            return httpx2.Response(status, json=error.model_dump(mode="json"))
         api_calls.append(json.loads(request.content))
         body = ProcessTextResponse(
             interaction_id=UUID(int=1),
@@ -89,11 +118,65 @@ async def test_channel_post_and_edited_message_ignored(kind, feed, api_calls, se
     assert api_calls == []
 
 
-@pytest.mark.parametrize("text", ["/start", "/start abc", "/help", "/settings"])
+@pytest.mark.parametrize("text", ["/start", "/help", "/help abc", "/settings"])
 async def test_commands_get_help_without_api(text, feed, api_calls, sent):
     await feed({"update_id": 1, "message": message_dict(text)})
     [msg] = sent()
     assert msg.text == HELP_TEXT
+    assert api_calls == []
+
+
+async def test_start_with_code_registers(feed, redeem_reply, api_calls, sent):
+    redeem_reply["value"] = RedeemInviteResponse(status=RedeemStatus.REGISTERED)
+    await feed({"update_id": 1, "message": message_dict("/start ABC")})
+    assert api_calls == [{"code": "ABC"}]
+    [msg] = sent()
+    assert msg.text == f"{WELCOME}\n\n{HELP_TEXT}"
+
+
+async def test_start_already_registered(feed, redeem_reply, sent):
+    redeem_reply["value"] = RedeemInviteResponse(status=RedeemStatus.ALREADY_REGISTERED)
+    await feed({"update_id": 1, "message": message_dict("/start ABC")})
+    [msg] = sent()
+    assert msg.text == HELP_TEXT
+
+
+async def test_start_invalid_code(feed, redeem_reply, sent):
+    error = ErrorResponse(code=ErrorCode.INVALID_INVITE, message="x")
+    redeem_reply["value"] = (400, error)
+    await feed({"update_id": 1, "message": message_dict("/start ABC")})
+    [msg] = sent()
+    assert msg.text == INVALID_INVITE
+
+
+async def test_start_disabled(feed, redeem_reply, sent):
+    error = ErrorResponse(code=ErrorCode.USER_DISABLED, message="x")
+    redeem_reply["value"] = (403, error)
+    await feed({"update_id": 1, "message": message_dict("/start ABC")})
+    [msg] = sent()
+    assert msg.text == DISABLED
+
+
+async def test_start_with_overlong_code(feed, api_calls, sent):
+    await feed({"update_id": 1, "message": message_dict("/start " + "A" * 65)})
+    [msg] = sent()
+    assert msg.text == INVALID_INVITE
+    assert api_calls == []
+
+
+async def test_help_with_args_does_not_redeem(feed, api_calls, sent):
+    await feed({"update_id": 1, "message": message_dict("/help abc")})
+    [msg] = sent()
+    assert msg.text == HELP_TEXT
+    assert api_calls == []
+
+
+async def test_text_from_unregistered_user(feed, process_reply, api_calls, sent):
+    error = ErrorResponse(code=ErrorCode.INVITE_REQUIRED, message="x")
+    process_reply["error"] = (401, error)
+    await feed({"update_id": 1, "message": message_dict("I has went.")})
+    [msg] = sent()
+    assert msg.text == NEED_INVITE
     assert api_calls == []
 
 

@@ -42,11 +42,6 @@ class ProcessedText:
 
 
 @dataclass(frozen=True)
-class AuthContext:
-    user_id: UUID
-
-
-@dataclass(frozen=True)
 class Interaction:
     id: UUID
     user_id: UUID
@@ -55,8 +50,12 @@ class Interaction:
 
 
 class RewriteFailed(Exception):
-    """The LLM could not produce a valid result. `reason` tells causes apart in logs."""
+    """The LLM could not produce a valid result. `reason` tells causes apart in logs.
 
-    def __init__(self, reason: str) -> None:
+    `usage` is what the calls that did reply consumed, or None if none did.
+    """
+
+    def __init__(self, reason: str, usage: Usage | None = None) -> None:
         super().__init__(reason)
         self.reason = reason
+        self.usage = usage

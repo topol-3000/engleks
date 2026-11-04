@@ -1,9 +1,4 @@
-from engleks_bot.handlers.start import HELP_TEXT, start
-
-
-async def test_start_sends_help(make_message, sent):
-    await start(make_message("/start"))
-    assert [m.text for m in sent()] == [HELP_TEXT]
+from engleks_bot.handlers.start import HELP_TEXT, WELCOME
 
 
 async def test_help_text_is_exact():
@@ -13,3 +8,7 @@ async def test_help_text_is_exact():
         "and I'll translate it into English. You'll also get short lessons on the patterns "
         "behind the edits."
     )
+
+
+async def test_welcome_text_is_exact():
+    assert WELCOME == "Your invite worked. Welcome!"

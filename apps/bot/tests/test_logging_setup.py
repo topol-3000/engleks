@@ -28,3 +28,19 @@ def test_structlog_logs_rendered_as_json(capsys):
     structlog.get_logger().info("api_healthy")
     [line] = [json.loads(x) for x in capsys.readouterr().out.splitlines() if x]
     assert line["event"] == "api_healthy"
+
+
+def test_exception_logged_without_frame_locals(capsys):
+    configure_logging("json", "INFO")
+    log = structlog.get_logger()
+
+    def handle(code: str) -> None:
+        raise ValueError("boom")
+
+    try:
+        handle("SECRETINVITECODE")
+    except ValueError:
+        log.exception("unhandled")
+    out = capsys.readouterr().out
+    assert "SECRETINVITECODE" not in out
+    assert "ValueError" in out

@@ -9,6 +9,9 @@ x-api-env: &api-env
   API_LOG_LEVEL: ${API_LOG_LEVEL:-INFO}
   API_LLM_BASE_URL: http://litellm:4000/v1
   API_LLM_MODEL: ${API_LLM_MODEL:-engleks-rewrite}
+  API_RATE_LIMIT_PER_MINUTE: ${API_RATE_LIMIT_PER_MINUTE:-10}
+  API_DAILY_TOKEN_BUDGET: ${API_DAILY_TOKEN_BUDGET:-200000}
+  API_BOT_USERNAME: ${API_BOT_USERNAME:-}
 
 # migrate builds the full Settings in env.py, so it gets the same secrets as api.
 x-api-secrets: &api-secrets

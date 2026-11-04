@@ -101,26 +101,22 @@ class ProxyRewriter:
                     f"{exc}. Reply again with only the corrected JSON.",
                 },
             ]
-            second = await self._call(messages, attempt=2)
+            try:
+                second = await self._call(messages, attempt=2)
+            except RewriteFailed as failure:
+                # The first attempt was billed even though the second one failed.
+                raise RewriteFailed(failure.reason, usage=_usage([first])) from None
             attempts.append(second)
             try:
                 parsed = LLMRewrite.model_validate_json(second.content)
             except ValidationError:
-                raise RewriteFailed("invalid_output") from None
+                raise RewriteFailed("invalid_output", usage=_usage(attempts)) from None
 
-        costs = [a.cost for a in attempts]
-        usage = Usage(
-            model=attempts[-1].model,
-            prompt_version=PROMPT_VERSION,
-            tokens_in=sum(a.tokens_in for a in attempts),
-            tokens_out=sum(a.tokens_out for a in attempts),
-            cost=None if None in costs else sum((c for c in costs if c is not None), Decimal(0)),
-        )
         return RewriteOutcome(
             source_language=Language(parsed.source_language),
             output_text=parsed.output_text,
             explanations=parsed.explanations,
-            usage=usage,
+            usage=_usage(attempts),
             llm_response=parsed.model_dump(mode="json"),
         )
 
@@ -177,6 +173,17 @@ class ProxyRewriter:
             tokens_out=completion.usage.completion_tokens,
             cost=cost,
         )
+
+
+def _usage(attempts: list[_Attempt]) -> Usage:
+    costs = [a.cost for a in attempts]
+    return Usage(
+        model=attempts[-1].model,
+        prompt_version=PROMPT_VERSION,
+        tokens_in=sum(a.tokens_in for a in attempts),
+        tokens_out=sum(a.tokens_out for a in attempts),
+        cost=None if None in costs else sum((c for c in costs if c is not None), Decimal(0)),
+    )
 
 
 def _parse_cost(header: str | None) -> Decimal | None:
