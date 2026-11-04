@@ -1,3 +1,8 @@
+from engleks_contracts.auth import (
+    RedeemInviteRequest,
+    RedeemInviteResponse,
+    RedeemStatus,
+)
 from engleks_contracts.errors import ErrorCode, ErrorResponse
 from engleks_contracts.health import HealthResponse, HealthStatus
 from engleks_contracts.texts import (
@@ -14,4 +19,7 @@ __all__ = [
     "Language",
     "ProcessTextRequest",
     "ProcessTextResponse",
+    "RedeemInviteRequest",
+    "RedeemInviteResponse",
+    "RedeemStatus",
 ]

@@ -8,6 +8,11 @@ class ErrorCode(StrEnum):
     VALIDATION_ERROR = "validation_error"
     UNAUTHORIZED = "unauthorized"
     LLM_UNAVAILABLE = "llm_unavailable"
+    INVITE_REQUIRED = "invite_required"
+    USER_DISABLED = "user_disabled"
+    INVALID_INVITE = "invalid_invite"
+    RATE_LIMITED = "rate_limited"
+    DAILY_BUDGET = "daily_budget"
 
 
 class ErrorResponse(BaseModel):
