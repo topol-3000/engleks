@@ -24,7 +24,7 @@ async def process_text(
     if admission.requests_this_minute > auth.limits.requests_per_minute:
         log.info(
             "rate_limited",
-            user_id=auth.user_id,
+            user_id=str(auth.user_id),
             count=admission.requests_this_minute,
             limit=auth.limits.requests_per_minute,
         )
@@ -32,7 +32,7 @@ async def process_text(
     if admission.tokens_today >= auth.limits.daily_tokens:
         log.info(
             "daily_budget_exhausted",
-            user_id=auth.user_id,
+            user_id=str(auth.user_id),
             tokens_today=admission.tokens_today,
             limit=auth.limits.daily_tokens,
         )

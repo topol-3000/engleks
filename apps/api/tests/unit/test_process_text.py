@@ -167,14 +167,14 @@ async def test_rejections_logged():
     assert {
         "event": "rate_limited",
         "log_level": "info",
-        "user_id": AUTH.user_id,
+        "user_id": str(AUTH.user_id),
         "count": 4,
         "limit": 3,
     } in logs
     assert {
         "event": "daily_budget_exhausted",
         "log_level": "info",
-        "user_id": AUTH.user_id,
+        "user_id": str(AUTH.user_id),
         "tokens_today": 100,
         "limit": 100,
     } in more

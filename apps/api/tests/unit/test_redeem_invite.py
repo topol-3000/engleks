@@ -21,10 +21,20 @@ CALLER = Caller(Provider.TELEGRAM, "42")
 
 
 class FakeIdentities:
-    def __init__(self, users: dict[str, UserAccess] | None = None) -> None:
+    def __init__(
+        self, users: dict[str, UserAccess] | None = None, appears_on_lookup: int | None = None
+    ) -> None:
         self.users = {(Provider.TELEGRAM, ext): u for ext, u in (users or {}).items()}
+        # Simulates a concurrent signup: the user becomes visible from this lookup onward.
+        self.appears_on_lookup = appears_on_lookup
+        self.lookups = 0
 
     async def find_user(self, provider: Provider, external_id: str) -> UserAccess | None:
+        self.lookups += 1
+        if self.appears_on_lookup is not None and self.lookups >= self.appears_on_lookup:
+            return self.users[(provider, external_id)]
+        if self.appears_on_lookup is not None:
+            return None
         return self.users.get((provider, external_id))
 
 
@@ -101,6 +111,21 @@ async def test_invalid_invite_propagates():
     with pytest.raises(InvalidInvite) as e:
         await redeem_invite(CALLER, CODE, FakeIdentities(), invites)
     assert e.value.reason == "expired"
+
+
+async def test_rejected_after_concurrent_signup_by_same_user_is_already_registered():
+    # Double-tap on a single-use code: the second redeem sees used_up, but the caller registered.
+    invites = FakeInvites(fail_with=InvalidInvite("used_up"))
+    ids = FakeIdentities({"42": user()}, appears_on_lookup=2)
+    result = await redeem_invite(CALLER, CODE, ids, invites)
+    assert result is RedeemResult.ALREADY_REGISTERED
+
+
+async def test_rejected_after_concurrent_signup_of_disabled_user_raises():
+    invites = FakeInvites(fail_with=InvalidInvite("used_up"))
+    ids = FakeIdentities({"42": user(UserStatus.DISABLED)}, appears_on_lookup=2)
+    with pytest.raises(UserDisabled):
+        await redeem_invite(CALLER, CODE, ids, invites)
 
 
 async def test_logs_ids_not_code():

@@ -18,7 +18,10 @@ def configure_logging(log_format: Literal["json", "console"], log_level: str) ->
     ]
     if log_format == "json":
         renderer: list[structlog.typing.Processor] = [
-            structlog.processors.dict_tracebacks,
+            # No frame locals: they would put invite codes and user text into the log.
+            structlog.processors.ExceptionRenderer(
+                structlog.tracebacks.ExceptionDictTransformer(show_locals=False)
+            ),
             structlog.processors.JSONRenderer(),
         ]
     else:

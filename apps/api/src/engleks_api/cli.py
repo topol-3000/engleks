@@ -57,6 +57,7 @@ def build_cli(settings: Settings | None = None) -> typer.Typer:
     @asynccontextmanager
     async def repositories() -> AsyncGenerator[tuple[_Repositories, Settings]]:
         # Built only when a command runs, so `--help` needs no environment.
+        # pyright cannot see that pydantic-settings fills the required fields from the environment.
         resolved = settings or Settings()  # pyright: ignore[reportCallIssue]
         # stdout carries the command's output (scripts do `code=$(make invite)`): logs go to stderr.
         configure_logging(resolved.log_format, resolved.log_level, stream=sys.stderr)
