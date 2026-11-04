@@ -88,7 +88,7 @@ Errors:
 ## 4. Authentication (option A)
 
 - The bot and the API share a secret, `X-Bot-Token`. The bot also sends `X-Telegram-User-Id`.
-- Signup: `/start <code>` or a deep link → `POST /v1/auth/redeem {telegram_id, code}` → a user and an identity are created.
+- Signup: `/start <code>` or a deep link → `POST /v1/auth/redeem {code}` (the Telegram id comes from `X-Telegram-User-Id`) → a user and an identity are created.
 - Auth is isolated in an `AuthContext → user_id` layer, so use cases don't know about Telegram.
 - Possible later options: B (per-user JWT) and C (web login with Telegram Login or OIDC, plus account linking).
 
@@ -119,7 +119,7 @@ Errors:
 
 ## 8. API (draft)
 
-- `POST /v1/auth/redeem`
+- `POST /v1/auth/redeem`: request `{code}` (1–64 characters, matched case-insensitively); response `{status}`, `registered` or `already_registered`. Errors: `400 invalid_invite`, `401 unauthorized`, `403 user_disabled`
 - `POST /v1/texts/process`: request `{text}` (1–4096 characters, not blank); response
   `{interaction_id, source_language, output_text, explanations}`, where `explanations` are the lessons
 - `GET/POST/PATCH /v1/profiles`

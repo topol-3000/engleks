@@ -1,5 +1,8 @@
+import secrets
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from engleks_api.domain.text_processing import Provider
@@ -44,3 +47,44 @@ class InviteRequired(Exception):
 
 class UserDisabled(Exception):
     pass
+
+
+# Uppercase without look-alikes (no I, L, O, 0, 1); fits a Telegram deep link payload.
+INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+INVITE_CODE_LENGTH = 12
+
+
+def generate_invite_code() -> str:
+    return "".join(secrets.choice(INVITE_ALPHABET) for _ in range(INVITE_CODE_LENGTH))
+
+
+class RedeemResult(StrEnum):
+    REGISTERED = "registered"
+    ALREADY_REGISTERED = "already_registered"
+
+
+type InviteRejection = Literal["unknown", "expired", "revoked", "used_up"]
+
+
+class InvalidInvite(Exception):
+    def __init__(self, reason: InviteRejection) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True)
+class Invite:
+    id: UUID
+    code: str
+    note: str | None
+    max_uses: int
+    used_count: int
+    expires_at: datetime | None
+    revoked_at: datetime | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class Redemption:
+    user_id: UUID
+    invite_code_id: UUID

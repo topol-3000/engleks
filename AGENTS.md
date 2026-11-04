@@ -96,6 +96,7 @@ Never add an import-linter exception to get green; change the design instead.
 | an LLM-backed task | task-level port in `domain/ports.py` (e.g. `TextRewriter`), adapter in `infra/llm/` that calls only the LiteLLM proxy over `httpx2` and validates the output into an infra Pydantic model (see `ProxyRewriter`) |
 | a prompt | `infra/llm/prompts/<name>.v<N>.j2`; a changed prompt is a new version, never an edit |
 | an endpoint that needs the caller | `auth: Annotated[AuthContext, Depends(auth_context)]` from `transport/auth.py`; use cases receive `AuthContext`, never headers |
+| an endpoint that runs before the caller has an account | `caller: Annotated[Caller, Depends(bot_caller)]` from `transport/auth.py` (see `transport/invites.py`) |
 | a shared object in the bot (`ApiClient`) | dispatcher workflow data in `main.build_dispatcher()`, received as a handler argument |
 | a bot command | `handlers/<feature>.py` with a `build_router()` factory, included in `main.build_dispatcher()`; layout in `rendering/` |
 

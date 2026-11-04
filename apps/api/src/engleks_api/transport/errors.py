@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from engleks_api.domain.access import InviteRequired, UserDisabled
+from engleks_api.domain.access import InvalidInvite, InviteRequired, UserDisabled
 from engleks_api.domain.text_processing import RewriteFailed
 from engleks_api.transport.auth import Unauthorized
 from engleks_contracts import ErrorCode, ErrorResponse
@@ -28,6 +28,11 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(InviteRequired)
     async def invite_required(request: Request, exc: InviteRequired) -> JSONResponse:
         return _error(401, ErrorCode.INVITE_REQUIRED, "Invite required")
+
+    @app.exception_handler(InvalidInvite)
+    async def invalid_invite(request: Request, exc: InvalidInvite) -> JSONResponse:
+        log.info("invite_rejected", reason=exc.reason)
+        return _error(400, ErrorCode.INVALID_INVITE, "Invalid invite")
 
     @app.exception_handler(UserDisabled)
     async def user_disabled(request: Request, exc: UserDisabled) -> JSONResponse:
