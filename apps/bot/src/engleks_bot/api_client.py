@@ -10,6 +10,8 @@ from engleks_contracts import (
     HealthResponse,
     ProcessTextRequest,
     ProcessTextResponse,
+    RedeemInviteRequest,
+    RedeemInviteResponse,
 )
 
 
@@ -54,6 +56,17 @@ class ApiClient:
             json=request.model_dump(mode="json"),
             headers={"X-Telegram-User-Id": str(telegram_user_id)},
             timeout=self._process_timeout,
+        )
+
+    async def redeem_invite(
+        self, telegram_user_id: int, request: RedeemInviteRequest
+    ) -> RedeemInviteResponse:
+        return await self._request(
+            "POST",
+            "/v1/auth/redeem",
+            RedeemInviteResponse,
+            json=request.model_dump(mode="json"),
+            headers={"X-Telegram-User-Id": str(telegram_user_id)},
         )
 
     async def _request[T: BaseModel](

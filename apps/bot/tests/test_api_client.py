@@ -14,6 +14,9 @@ from engleks_contracts import (
     Language,
     ProcessTextRequest,
     ProcessTextResponse,
+    RedeemInviteRequest,
+    RedeemInviteResponse,
+    RedeemStatus,
 )
 
 
@@ -150,3 +153,32 @@ async def test_health_has_no_user_header():
         await c.health()
     assert seen[0].headers["X-Telegram-User-Id"] == "1"
     assert "X-Telegram-User-Id" not in seen[-1].headers
+
+
+async def test_redeem_request_and_response():
+    seen: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        body = RedeemInviteResponse(status=RedeemStatus.REGISTERED)
+        return httpx2.Response(200, json=body.model_dump(mode="json"))
+
+    async with client_for(handler) as c:
+        got = await c.redeem_invite(42, RedeemInviteRequest(code="ABC"))
+    assert got == RedeemInviteResponse(status=RedeemStatus.REGISTERED)
+    r = seen[-1]
+    assert (r.method, r.url.path) == ("POST", "/v1/auth/redeem")
+    assert (r.headers["X-Bot-Token"], r.headers["X-Telegram-User-Id"]) == ("tok", "42")
+    assert json.loads(r.content) == {"code": "ABC"}
+
+
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(400, ErrorCode.INVALID_INVITE), (403, ErrorCode.USER_DISABLED)],
+)
+async def test_redeem_errors(status, code):
+    body = ErrorResponse(code=code, message="x").model_dump(mode="json")
+    async with client_for(lambda _: httpx2.Response(status, json=body)) as c:
+        with pytest.raises(ApiError) as e:
+            await c.redeem_invite(1, RedeemInviteRequest(code="ABC"))
+    assert (e.value.status_code, e.value.code) == (status, code)
