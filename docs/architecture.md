@@ -96,7 +96,7 @@ Errors:
 
 - Rate limit: N requests per minute per user. Counters in Postgres for the MVP, Redis later.
 - Daily token budget: checked before the LLM call and updated after it.
-- Defaults are set in config. `app_user.limits_override` changes them for one user.
+- Defaults are set in config. The typed nullable columns `rate_limit_per_minute` and `daily_token_budget` on `app_user` override them for one user.
 
 ## 6. Admin dashboard
 
@@ -109,12 +109,13 @@ Errors:
 
 | Table | Purpose |
 | --- | --- |
-| `app_user` | status (active/disabled), `limits_override`. Not `user`: reserved in Postgres |
+| `app_user` | `status` (active/disabled), nullable overrides `rate_limit_per_minute` and `daily_token_budget`, `invite_code_id` → `invite_code`. Not `user`: reserved in Postgres |
 | `identity` | provider (telegram, later web), `external_id` → `app_user` |
-| `invite_code` | code, `created_by`, `max_uses`, `used_count`, `expires_at`, revoked |
+| `invite_code` | `code`, `note`, `max_uses`, `used_count`, `expires_at`, `revoked_at` |
 | `context_profile` | audience, tone, channel, glossary |
 | `interaction` | input, source language, output, full JSON response (with the lessons), model, prompt version, tokens, cost |
-| `usage_daily` | `user_id`, date, requests, `tokens_in`, `tokens_out`, cost |
+| `usage_daily` | `user_id`, `day`, requests, `tokens_in`, `tokens_out`, cost |
+| `rate_limit` | `user_id`, `window_start`, `count`: the current per-minute window counter |
 
 ## 8. API (draft)
 
