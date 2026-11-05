@@ -131,3 +131,5 @@ The dashboard calls the same admin use cases as the `engleks-admin` CLI; it adds
 ## 9. Deployment
 
 Docker Compose with the services `api`, `bot` (long polling for the MVP), `postgres` and `litellm` (the LLM proxy, with its own database on the same Postgres server), plus `ollama` in dev. Configuration comes from env, with secrets kept separately. Token usage and cost are logged.
+
+Production is one Hetzner Cloud CAX11 (arm64) running the same Compose file with a `compose.prod.yaml` override. CI builds arm64 images on native ARM runners, scans them and pushes them to GHCR tagged with the commit SHA; every green push to `main` is deployed over SSH by a forced command that rolls back to the previous release if the new one does not come up healthy. Secrets live only in the server's `.env`. Both databases and `.env` are backed up nightly with restic, encrypted, to a Hetzner Storage Box, and healthchecks.io reports a missed backup. Runbook: [deployment.md](deployment.md).
