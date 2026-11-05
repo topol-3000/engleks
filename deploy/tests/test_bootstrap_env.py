@@ -4,7 +4,9 @@ import pytest
 
 from .conftest import DEFAULT_ENV, NEW, Server, mode
 
-ANSWERS = "123:tg\nsk-ant-x\nhttps://hc/x\n\n\n\n\n\n"
+# Telegram token, OpenAI key, healthchecks URL, Anthropic key (empty: optional), then the
+# five values with their defaults.
+ANSWERS = "123:tg\nsk-openai-x\nhttps://hc/x\n\n\n\n\n\n\n"
 
 KEYS = {
     "API_DB_PASSWORD",
@@ -79,18 +81,18 @@ def test_writes_env(fresh: Server):
     for line in [
         f"ENGLEKS_TAG={NEW}",
         "COMPOSE_FILE=compose.yaml:compose.prod.yaml",
-        "API_LLM_MODEL=claude-haiku-5-5",
+        "API_LLM_MODEL=gpt-6.1-terra",
         "RESTIC_REPOSITORY=sftp:storagebox:engleks",
         "LITELLM_UI_USERNAME=admin",
-        "OPENAI_API_KEY=unused",
+        "OPENAI_API_KEY=sk-openai-x",
         "API_RATE_LIMIT_PER_MINUTE=10",
         "API_DAILY_TOKEN_BUDGET=200000",
         "API_LLM_API_KEY=sk-generated",
         "BOT_TELEGRAM_TOKEN=123:tg",
-        "ANTHROPIC_API_KEY=sk-ant-x",
+        "ANTHROPIC_API_KEY=unused",
         "HEALTHCHECKS_BACKUP_URL=https://hc/x",
-        "LLM_UPSTREAM_MODEL=anthropic/claude-haiku-5-5",
-        "LLM_UPSTREAM_API_BASE=https://api.anthropic.com",
+        "LLM_UPSTREAM_MODEL=openai/gpt-6.1-terra",
+        "LLM_UPSTREAM_API_BASE=https://api.openai.com/v1",
         "API_BOT_USERNAME=",
     ]:
         assert line in lines
@@ -124,7 +126,7 @@ def test_secrets_not_echoed(fresh: Server):
     assert r.returncode == 0, r.stderr
     out = r.stdout + r.stderr
     restic_password = env_dict(fresh)["RESTIC_PASSWORD"]
-    for secret in ("123:tg", "sk-ant-x", restic_password, "sk-generated"):
+    for secret in ("123:tg", "sk-openai-x", restic_password, "sk-generated"):
         assert secret not in out
     assert not any(restic_password in c for c in fresh.calls())
     assert "password manager" in out
@@ -140,13 +142,13 @@ def test_empty_secret_aborts(fresh: Server, empty: int):
     assert fresh.calls() == []
 
 
-def test_openai_key_prompted_for_openai_upstream(fresh: Server):
-    answers = "123:tg\nsk-ant-x\nhttps://hc/x\n\nopenai/gpt-x\n\n\n\nsk-openai\n"
-    r = bootstrap(fresh, answers)
+def test_anthropic_key_kept_when_given(fresh: Server):
+    answers = ANSWERS.split("\n")
+    answers[3] = "sk-ant-x"
+    r = bootstrap(fresh, "\n".join(answers))
     assert r.returncode == 0, r.stderr
-    env = env_dict(fresh)
-    assert env["OPENAI_API_KEY"] == "sk-openai"
-    assert env["LLM_UPSTREAM_MODEL"] == "openai/gpt-x"
+    assert env_dict(fresh)["ANTHROPIC_API_KEY"] == "sk-ant-x"
+    assert "sk-ant-x" not in r.stdout + r.stderr
 
 
 def test_failure_after_env_written_prints_recovery(fresh: Server):

@@ -62,10 +62,12 @@ your profile → **Packages** → `engleks-api` → **Package settings** → **C
   its ping URL (`https://hc-ping.com/<uuid>`). Treat it as a secret: anyone with it can
   report a backup as done.
 
-### 3. Anthropic spending limit
+### 3. OpenAI API key and budget
 
-In the Anthropic console, set a monthly spending limit on the organisation (Settings →
-Limits). This is the second cap, behind LiteLLM's.
+Production runs on OpenAI's `gpt-6.1-terra`. In the OpenAI platform, create a project
+for engleks and an API key in it, and set a monthly budget on the project (Settings →
+Limits). This is the second guard, behind LiteLLM's cap. An Anthropic key is optional: it
+only serves the `claude-*` aliases in `deploy/litellm/config.yaml`.
 
 ### 4. CI's SSH key
 
@@ -130,11 +132,12 @@ It generates every password and key, and asks for:
 | Prompt | Answer |
 | --- | --- |
 | `BOT_TELEGRAM_TOKEN` | the token from @BotFather (not echoed) |
-| `ANTHROPIC_API_KEY` | the Anthropic API key (not echoed) |
+| `OPENAI_API_KEY` | the OpenAI API key from step 3 (not echoed) |
 | `HEALTHCHECKS_BACKUP_URL` | the ping URL from step 2 (not echoed) |
+| `ANTHROPIC_API_KEY` | Enter to skip, or an Anthropic key for the `claude-*` aliases (not echoed) |
 | `RESTIC_REPOSITORY` | Enter for `sftp:storagebox:engleks` (relative to the box's home; its `/` is not writable) |
-| `LLM_UPSTREAM_MODEL`, `LLM_UPSTREAM_API_BASE` | Enter for the defaults (Anthropic) |
-| `API_LLM_MODEL` | Enter for `claude-haiku-5-5` |
+| `LLM_UPSTREAM_MODEL`, `LLM_UPSTREAM_API_BASE` | Enter for the defaults (OpenAI) |
+| `API_LLM_MODEL` | Enter for `gpt-6.1-terra` |
 | `API_BOT_USERNAME` | the bot's username without `@`, so invites come with a link |
 
 It then starts `postgres` and `litellm`, creates the API's LiteLLM key with a cap of $10
@@ -213,6 +216,10 @@ are in GHCR). On the server, by hand:
 sudo -iu deploy engleks-deploy <sha>
 ```
 
+An older commit's `deploy/litellm/config.yaml` may not have the alias `.env` names in
+`API_LLM_MODEL` (`gpt-6.1-terra` arrived after the first release). Then switch the model
+back to one it has (below) before rolling back.
+
 ### Admin commands
 
 ```bash
@@ -250,6 +257,34 @@ curl -sS http://127.0.0.1:4000/key/update \
   -H @<(printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$(env_get LITELLM_MASTER_KEY)") \
   --data @<(printf '{"key": "%s", "max_budget": 20}' "$(env_get API_LLM_API_KEY)")
 ```
+
+### Switching the model
+
+`API_LLM_MODEL` in `.env` names a `model_name` alias in `deploy/litellm/config.yaml`; the
+alias must be on `main` and deployed first. The API's LiteLLM key only accepts the models
+it was created with, so add a newer alias to it, then point the API at it. As `deploy` in
+`/opt/engleks`, with the upstream key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`) already
+in `.env`:
+
+```bash
+env_get() { sed -n "s/^$1=//p" .env | tail -n 1; }
+curl -sS http://127.0.0.1:4000/key/update \
+  -H @<(printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$(env_get LITELLM_MASTER_KEY)") \
+  --data @<(printf '{"key": "%s", "models": ["engleks-rewrite", "gpt-6.1-terra", "claude-sonnet-5-5", "claude-haiku-5-5", "mistral-small"]}' "$(env_get API_LLM_API_KEY)")
+sed -i 's/^API_LLM_MODEL=.*/API_LLM_MODEL=gpt-6.1-terra/' .env
+docker compose up -d --force-recreate --no-deps litellm api
+```
+
+The model list is the one in `deploy/litellm/generate_key.py`. `litellm` is recreated only
+when an upstream key changed; it reads `config.yaml` at start, which every deploy does.
+Then send the bot a message and check the request in the LiteLLM UI (model and spend).
+
+#### From Claude Haiku to GPT-6.1 Terra (once)
+
+Servers bootstrapped before `gpt-6.1-terra` have `OPENAI_API_KEY=unused`. Put the OpenAI
+key from step 3 into `.env` as `OPENAI_API_KEY` (and set the project's budget), then run
+the commands above. Going back is the same `sed` with `claude-haiku-5-5`, recreating only
+`api`.
 
 ### Changing a secret
 

@@ -21,6 +21,7 @@ from pathlib import Path
 
 MODELS = [
     "engleks-rewrite",
+    "gpt-6.1-terra",
     "claude-sonnet-5-5",
     "claude-haiku-5-5",
     "mistral-small",

@@ -9,7 +9,13 @@ assert _spec is not None and _spec.loader is not None
 gk = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gk)
 
-MODELS = ["engleks-rewrite", "claude-sonnet-5-5", "claude-haiku-5-5", "mistral-small"]
+MODELS = [
+    "engleks-rewrite",
+    "gpt-6.1-terra",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+    "mistral-small",
+]
 
 
 def test_payload_without_budget_is_unchanged():
