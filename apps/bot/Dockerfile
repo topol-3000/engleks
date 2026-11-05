@@ -18,6 +18,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package engleks-bot
 
 FROM ${PYTHON_IMAGE}
+# CVE-2026-109518: the base image's apt 3.0.3 predates the fix in trixie-security. Drop this
+# once the pinned base image ships apt 3.0.4 or later.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends --only-upgrade \
+        apt=3.0.4 libapt-pkg7.0=3.0.4 \
+    && rm -rf /var/lib/apt/lists/*
 # pip is not needed at runtime, and its vendored libraries (urllib3) carry CVEs.
 RUN python -m pip uninstall --yes pip \
     && groupadd --system --gid 10001 app \

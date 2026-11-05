@@ -1,0 +1,21 @@
+# Production override: run the images CI built, scanned and pushed to GHCR instead of
+# building them. The server's .env selects it with COMPOSE_FILE=compose.yaml:compose.prod.yaml
+# and sets ENGLEKS_TAG to the deployed commit SHA (rewritten by engleks-deploy).
+# See docs/deployment.md.
+
+services:
+  migrate:
+    image: ghcr.io/topol-3000/engleks-api:${ENGLEKS_TAG:?set ENGLEKS_TAG}
+    pull_policy: missing
+
+  api:
+    image: ghcr.io/topol-3000/engleks-api:${ENGLEKS_TAG:?set ENGLEKS_TAG}
+    build: !reset null
+
+  litellm:
+    image: ghcr.io/topol-3000/engleks-litellm:${ENGLEKS_TAG:?set ENGLEKS_TAG}
+    build: !reset null
+
+  bot:
+    image: ghcr.io/topol-3000/engleks-bot:${ENGLEKS_TAG:?set ENGLEKS_TAG}
+    build: !reset null

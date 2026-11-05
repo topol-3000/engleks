@@ -1,0 +1,11 @@
+# 03:00 UTC, before the 04:00 unattended-upgrades reboot window. Persistent: a run missed
+# while the server was down happens at the next boot.
+[Unit]
+Description=Run the engleks backup daily at 03:00 UTC
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

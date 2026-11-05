@@ -7,6 +7,7 @@ lint:
 	uv run ruff format --check .
 	uv run pyright
 	uv run lint-imports
+	uv run pre-commit run shellcheck --all-files
 fmt:
 	uv run ruff format .
 	uv run ruff check --fix .
