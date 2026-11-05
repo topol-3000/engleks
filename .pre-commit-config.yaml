@@ -5,3 +5,9 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
+        # Matched by shebang too, so engleks-deploy and engleks-backup (no .sh) are checked.
+        files: ^deploy/server/

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Deploys one commit of engleks on the production server.
+#
+# Installed as /usr/local/bin/engleks-deploy by setup.sh and run as `deploy`, either as the
+# forced command of CI's SSH key (the SHA arrives in SSH_ORIGINAL_COMMAND) or by hand:
+# `engleks-deploy <sha>`. It lives outside the checkout, so a deploy never rewrites the
+# script that is running it.
+#
+# Checks out the SHA, points ENGLEKS_TAG in .env at it, pulls the GHCR images and starts
+# them. If that fails, it deploys the previous SHA again and exits 1 anyway.
+# Exit codes: 0 deployed, 1 failed (rolled back if possible) or lock timeout, 2 bad SHA.
+#
+# ENGLEKS_DIR and ENGLEKS_LOCK_TIMEOUT exist for the tests; the forced command gets no
+# client environment, so in production they are always the defaults.
+set -euo pipefail
+
+ENGLEKS_DIR=${ENGLEKS_DIR:-/opt/engleks}
+LOCK_TIMEOUT=${ENGLEKS_LOCK_TIMEOUT:-900}
+ENV_FILE=$ENGLEKS_DIR/.env
+IMAGE_PREFIX=ghcr.io/topol-3000/engleks-
+
+sha=${SSH_ORIGINAL_COMMAND-${1-}}
+if [[ ! $sha =~ ^[0-9a-f]{40}$ ]]; then
+  echo "usage: engleks-deploy <40-character lowercase commit SHA>" >&2
+  exit 2
+fi
+
+# Last KEY= line of .env, value verbatim. .env is never sourced.
+env_get() {
+  sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1
+}
+
+# Points ENGLEKS_TAG at SHA, appending the line if there is none. Every other line stays as
+# it is; the new file is created 0600 and moved over the old one.
+set_tag() {
+  local tmp
+  tmp=$(mktemp "$ENV_FILE.XXXXXX") || return 1
+  if ! awk -v tag="ENGLEKS_TAG=$1" '
+      /^ENGLEKS_TAG=/ { if (!done) print tag; done = 1; next }
+      { print }
+      END { if (!done) print tag }
+    ' "$ENV_FILE" >"$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  chmod 600 "$tmp" && mv -f "$tmp" "$ENV_FILE"
+}
+
+# set -e is off inside a function called from `if`, so every step ends in `|| return 1`.
+deploy() {
+  local target=$1
+  echo "==> fetch"
+  git fetch origin || return 1
+  echo "==> checkout $target"
+  git checkout --detach "$target" || return 1
+  set_tag "$target" || return 1
+  echo "==> pull images"
+  docker compose pull || return 1
+  # Checked on Compose 5.6: --wait returns 0 once the one-shot migrate has exited 0, so the
+  # plain form works. A failing migrate fails `up`, because api waits for it to complete
+  # successfully. 180 s covers LiteLLM's 90 s start period.
+  echo "==> start"
+  docker compose up -d --wait --wait-timeout 180 || return 1
+}
+
+# Removes local GHCR images of engleks other than the two given tags.
+remove_old_images() {
+  local keep=$1 previous=$2 image
+  docker image ls --format '{{.Repository}}:{{.Tag}}' --filter "reference=${IMAGE_PREFIX}*" |
+    while read -r image; do
+      case $image in
+        *":$keep" | *":<none>") continue ;;
+      esac
+      if [[ -n $previous && $image == *":$previous" ]]; then continue; fi
+      echo "==> remove $image"
+      docker image rm "$image" >/dev/null || echo "warning: could not remove $image" >&2
+    done
+}
+
+cd "$ENGLEKS_DIR"
+if [[ ! -f $ENV_FILE ]]; then
+  echo "error: $ENV_FILE is missing; run bootstrap-env.sh first" >&2
+  exit 1
+fi
+
+exec 9>"$ENGLEKS_DIR/.deploy.lock"
+if ! flock -w "$LOCK_TIMEOUT" 9; then
+  echo "error: another deploy or backup still holds the lock after ${LOCK_TIMEOUT}s" >&2
+  exit 1
+fi
+
+previous=$(env_get ENGLEKS_TAG)
+echo "==> deploying $sha (running: ${previous:-none})"
+
+if deploy "$sha"; then
+  remove_old_images "$sha" "$previous" || echo "warning: image cleanup failed" >&2
+  echo "==> deployed $sha"
+  exit 0
+fi
+
+echo "error: deploy of $sha failed" >&2
+if [[ -n $previous && $previous != "$sha" ]]; then
+  echo "==> rolling back to $previous"
+  if deploy "$previous"; then
+    echo "==> rolled back to $previous"
+  else
+    echo "error: rollback to $previous failed too; the server needs a person" >&2
+  fi
+fi
+exit 1

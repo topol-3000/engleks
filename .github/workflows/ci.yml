@@ -31,6 +31,8 @@ jobs:
           cache-dependency-glob: uv.lock
       - run: uv sync --all-packages --frozen
       - run: uv run ruff check . && uv run ruff format --check .
+      - name: Shellcheck the server scripts
+        run: uv run pre-commit run shellcheck --all-files
 
   types:
     runs-on: ubuntu-24.04
