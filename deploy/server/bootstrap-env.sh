@@ -42,6 +42,17 @@ ask_secret() {
   printf -v "$var" '%s' "$value"
 }
 
+# Reads a secret without echoing it. An empty answer stores "unused": Compose still needs
+# the variable set for the secret.
+ask_optional_secret() {
+  local var=$1 value=""
+  IFS= read -rsp "$var (Enter to skip): " value || true
+  if [[ -t 0 ]]; then echo >&2; fi
+  value=${value:-unused}
+  check_value "$var" "$value"
+  printf -v "$var" '%s' "$value"
+}
+
 # Reads a non-secret value; an empty answer takes the default.
 ask_value() {
   local var=$1 default=$2 value=""
@@ -56,19 +67,16 @@ random_hex() {
 }
 
 ask_secret BOT_TELEGRAM_TOKEN
-ask_secret ANTHROPIC_API_KEY
+ask_secret OPENAI_API_KEY
 ask_secret HEALTHCHECKS_BACKUP_URL
+# Only for the claude-* aliases in deploy/litellm/config.yaml.
+ask_optional_secret ANTHROPIC_API_KEY
 # Relative to the Storage Box home directory: the SFTP root (/) is not writable there.
 ask_value RESTIC_REPOSITORY sftp:storagebox:engleks
-ask_value LLM_UPSTREAM_MODEL anthropic/claude-haiku-5-5
-ask_value LLM_UPSTREAM_API_BASE https://api.anthropic.com
-ask_value API_LLM_MODEL claude-haiku-5-5
+ask_value LLM_UPSTREAM_MODEL openai/gpt-6.1-terra
+ask_value LLM_UPSTREAM_API_BASE https://api.openai.com/v1
+ask_value API_LLM_MODEL gpt-6.1-terra
 ask_value API_BOT_USERNAME ""
-if [[ $LLM_UPSTREAM_MODEL == openai/* ]]; then
-  ask_secret OPENAI_API_KEY
-else
-  OPENAI_API_KEY=unused
-fi
 
 tag=$(git rev-parse HEAD)
 if [[ ! $tag =~ ^[0-9a-f]{40}$ ]]; then
