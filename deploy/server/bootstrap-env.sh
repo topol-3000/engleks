@@ -58,7 +58,8 @@ random_hex() {
 ask_secret BOT_TELEGRAM_TOKEN
 ask_secret ANTHROPIC_API_KEY
 ask_secret HEALTHCHECKS_BACKUP_URL
-ask_value RESTIC_REPOSITORY sftp:storagebox:/engleks
+# Relative to the Storage Box home directory: the SFTP root (/) is not writable there.
+ask_value RESTIC_REPOSITORY sftp:storagebox:engleks
 ask_value LLM_UPSTREAM_MODEL anthropic/claude-haiku-5-5
 ask_value LLM_UPSTREAM_API_BASE https://api.anthropic.com
 ask_value API_LLM_MODEL claude-haiku-5-5
@@ -82,8 +83,8 @@ on_exit() {
   if [[ $status -ne 0 ]]; then
     cat >&2 <<EOF
 
-error: bootstrap failed after $ENV_FILE was written. To start over:
-  cd $ENGLEKS_DIR && docker compose down -v && rm .env
+error: bootstrap failed after $ENV_FILE was written. To start over, as yourself:
+  sudo -iu deploy sh -c 'cd $ENGLEKS_DIR && docker compose down -v && rm .env'
 then run this script again.
 EOF
   fi

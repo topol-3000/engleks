@@ -80,7 +80,7 @@ def test_writes_env(fresh: Server):
         f"ENGLEKS_TAG={NEW}",
         "COMPOSE_FILE=compose.yaml:compose.prod.yaml",
         "API_LLM_MODEL=claude-haiku-5-5",
-        "RESTIC_REPOSITORY=sftp:storagebox:/engleks",
+        "RESTIC_REPOSITORY=sftp:storagebox:engleks",
         "LITELLM_UI_USERNAME=admin",
         "OPENAI_API_KEY=unused",
         "API_RATE_LIMIT_PER_MINUTE=10",
@@ -152,7 +152,11 @@ def test_openai_key_prompted_for_openai_upstream(fresh: Server):
 def test_failure_after_env_written_prints_recovery(fresh: Server):
     r = fresh.run("bootstrap-env.sh", input=ANSWERS, STUB_HEAD=NEW, STUB_FAIL="^restic init")
     assert r.returncode == 1
-    assert "docker compose down -v" in r.stdout + r.stderr
+    # .env is deploy's and 0600, so the cleanup must run as deploy, not as the operator.
+    assert (
+        f"sudo -iu deploy sh -c 'cd {fresh.root} && docker compose down -v && rm .env'"
+        in r.stdout + r.stderr
+    )
 
 
 @pytest.mark.parametrize("token", ["12$3:tg", "123 tg", "123#tg", '123"tg'])

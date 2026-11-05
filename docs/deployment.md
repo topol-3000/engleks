@@ -132,7 +132,7 @@ It generates every password and key, and asks for:
 | `BOT_TELEGRAM_TOKEN` | the token from @BotFather (not echoed) |
 | `ANTHROPIC_API_KEY` | the Anthropic API key (not echoed) |
 | `HEALTHCHECKS_BACKUP_URL` | the ping URL from step 2 (not echoed) |
-| `RESTIC_REPOSITORY` | Enter for `sftp:storagebox:/engleks` |
+| `RESTIC_REPOSITORY` | Enter for `sftp:storagebox:engleks` (relative to the box's home; its `/` is not writable) |
 | `LLM_UPSTREAM_MODEL`, `LLM_UPSTREAM_API_BASE` | Enter for the defaults (Anthropic) |
 | `API_LLM_MODEL` | Enter for `claude-haiku-5-5` |
 | `API_BOT_USERNAME` | the bot's username without `@`, so invites come with a link |
@@ -144,8 +144,9 @@ per 30 days, and initialises the restic repository on the Storage Box.
 `.env` and are encrypted with its `RESTIC_PASSWORD`: without a copy off the server, a lost
 server means unreadable backups.
 
-If it fails halfway, start over: `cd /opt/engleks && docker compose down -v && rm .env`,
-then run it again.
+If it fails halfway, start over as yourself (`.env` is `deploy`'s and mode 0600):
+`sudo -iu deploy sh -c 'cd /opt/engleks && docker compose down -v && rm .env'`, then run it
+again.
 
 ### 9. GitHub environment
 
@@ -389,7 +390,7 @@ the Storage Box.
 
    ```bash
    cd /opt/engleks
-   export RESTIC_REPOSITORY=sftp:storagebox:/engleks
+   export RESTIC_REPOSITORY=sftp:storagebox:engleks
    read -rs RESTIC_PASSWORD; export RESTIC_PASSWORD   # paste it from the password manager
    dir=$(mktemp -d)
    restic restore latest --target "$dir"
