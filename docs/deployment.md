@@ -187,12 +187,17 @@ A merge to `main` runs CI. When CI is green, the Deploy workflow runs
    `migrate` first);
 5. on success, deletes the local images of older releases except the previous one.
 
-If any step fails, it deploys the previous SHA again and the run turns red. Read the run's
-log for the cause. The bot is down for a few seconds per deploy; Telegram keeps the
+If any step fails, it deploys the previous SHA again, from the local checkout and images
+(so a GitHub or GHCR outage does not stop the rollback), and the run turns red. Read the
+run's log for the cause. The server keeps the last deploy's output in
+`/opt/engleks/.deploy.log`; a deploy finishes (or rolls back) even if the Actions run is
+cancelled or loses its connection, and that file then shows how it ended. The bot is down for a few seconds per deploy; Telegram keeps the
 messages sent meanwhile.
 
 Deploys run one at a time. If several merges land while one deploys, only the newest
-waiting one runs.
+waiting one runs. Automatic deploys only deploy `main`'s current head: re-running an old CI
+run does not move production backwards (its Deploy run ends green with a notice). Going
+back is always a manual rollback.
 
 **Migrations must work with the previous release's code.** A rollback restores the old
 images but never downgrades the schema, so add columns as nullable or with a default, and

@@ -1,8 +1,9 @@
 import re
+import subprocess
 
 import pytest
 
-from .conftest import DEFAULT_ENV, NEW, PREV, Server, mode
+from .conftest import DEFAULT_ENV, NEW, PREV, SCRIPTS, Server, mode
 
 UP = "docker compose up -d --wait --wait-timeout 180"
 OLD = "c" * 40
@@ -118,4 +119,48 @@ def test_waits_for_lock_then_gives_up(server: Server):
     r = deploy(server)
     assert r.returncode == 1
     assert server.calls() == []
+    assert server.tag() == PREV
+
+
+def deploy_with_lost_client(server: Server, **env: str):
+    """Runs a deploy whose stdout reader is gone, as when the CI job is cancelled."""
+    full_env = {**server.base_env, "SSH_ORIGINAL_COMMAND": NEW, **env}
+    proc = subprocess.Popen(
+        ["bash", str(SCRIPTS / "engleks-deploy")],
+        cwd=server.root,
+        env=full_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    assert proc.stdout is not None
+    proc.stdout.close()
+    return proc.wait(timeout=30)
+
+
+def test_deploy_finishes_after_client_goes_away(server: Server):
+    rc = deploy_with_lost_client(server)
+    assert rc == 0
+    assert any(c.startswith(UP) and c.endswith(f"@{NEW}") for c in server.calls())
+    assert server.tag() == NEW
+    assert "==> deployed" in (server.root / ".deploy.log").read_text()
+
+
+def test_rollback_finishes_after_client_goes_away(server: Server):
+    rc = deploy_with_lost_client(server, STUB_FAIL="^docker compose up", STUB_FAIL_TAG=NEW)
+    assert rc == 1
+    assert server.tag() == PREV
+    assert any(c.startswith(UP) and c.endswith(f"@{PREV}") for c in server.calls())
+
+
+def test_rollback_works_offline(server: Server):
+    # The new images could not be pulled: GHCR (and likely GitHub) is down. The previous
+    # release's commit and images are local, so the rollback must not need the network.
+    r = deploy(server, STUB_FAIL="^docker compose pull", STUB_FAIL_TAG=NEW)
+    assert r.returncode == 1
+    calls = server.calls()
+    failed_pull = calls.index(f"docker compose pull @{NEW}")
+    rollback = calls[failed_pull + 1 :]
+    assert not any(c.startswith(("git fetch", "docker compose pull")) for c in rollback)
+    assert f"git checkout --detach {PREV} @{NEW}" in rollback
+    assert any(c.startswith(UP) and c.endswith(f"@{PREV}") for c in rollback)
     assert server.tag() == PREV

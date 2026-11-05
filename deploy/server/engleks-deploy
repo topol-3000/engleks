@@ -46,16 +46,23 @@ set_tag() {
   chmod 600 "$tmp" && mv -f "$tmp" "$ENV_FILE"
 }
 
-# set -e is off inside a function called from `if`, so every step ends in `|| return 1`.
+# deploy SHA [offline]. set -e is off inside a function called from `if`, so every step
+# ends in `|| return 1`. The rollback runs offline: the previous release's commit and images
+# are already here, and a GitHub or GHCR outage may be why the deploy failed. (`up` still
+# pulls an image that is missing.)
 deploy() {
-  local target=$1
-  echo "==> fetch"
-  git fetch origin || return 1
+  local target=$1 offline=${2-}
+  if [[ -z $offline ]]; then
+    echo "==> fetch"
+    git fetch origin || return 1
+  fi
   echo "==> checkout $target"
   git checkout --detach "$target" || return 1
   set_tag "$target" || return 1
-  echo "==> pull images"
-  docker compose pull || return 1
+  if [[ -z $offline ]]; then
+    echo "==> pull images"
+    docker compose pull || return 1
+  fi
   # Checked on Compose 5.6: --wait returns 0 once the one-shot migrate has exited 0, so the
   # plain form works. A failing migrate fails `up`, because api waits for it to complete
   # successfully. 180 s covers LiteLLM's 90 s start period.
@@ -83,6 +90,14 @@ if [[ ! -f $ENV_FILE ]]; then
   exit 1
 fi
 
+# If the SSH client goes away (the CI job is cancelled or times out, the network drops),
+# writing to it would kill this script with SIGPIPE halfway through a deploy, before any
+# rollback. So all output goes through tee, which with -p ignores the lost reader and keeps
+# writing .deploy.log (the last deploy's output). On exit, wait for tee to drain.
+exec > >(tee -p "$ENGLEKS_DIR/.deploy.log") 2>&1
+tee_pid=$!
+trap 'exec >&- 2>&-; wait "$tee_pid" || true' EXIT
+
 exec 9>"$ENGLEKS_DIR/.deploy.lock"
 if ! flock -w "$LOCK_TIMEOUT" 9; then
   echo "error: another deploy or backup still holds the lock after ${LOCK_TIMEOUT}s" >&2
@@ -101,7 +116,7 @@ fi
 echo "error: deploy of $sha failed" >&2
 if [[ -n $previous && $previous != "$sha" ]]; then
   echo "==> rolling back to $previous"
-  if deploy "$previous"; then
+  if deploy "$previous" offline; then
     echo "==> rolled back to $previous"
   else
     echo "error: rollback to $previous failed too; the server needs a person" >&2
