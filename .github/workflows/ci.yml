@@ -74,6 +74,21 @@ jobs:
       - run: uv sync --all-packages --frozen
       - run: uv run pytest
 
+  # The production override must stay valid and point only at GHCR images. .env.example
+  # supplies the dummy values; a variable a later change requires belongs there anyway.
+  compose-prod:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate compose.yaml + compose.prod.yaml
+        run: |
+          export ENGLEKS_TAG=0000000000000000000000000000000000000000
+          PROD="docker compose --env-file .env.example -f compose.yaml -f compose.prod.yaml"
+          $PROD config --quiet
+          ! $PROD config --images | grep -v '^ghcr.io/topol-3000/engleks-\|^postgres:\|^ollama/'
+
   trivy-fs:
     runs-on: ubuntu-24.04
     steps:
