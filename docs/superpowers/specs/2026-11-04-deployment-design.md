@@ -37,7 +37,7 @@ Out of scope, with the reason:
 
 | Decision | Choice | Why |
 | --- | --- | --- |
-| Host | One Hetzner Cloud CAX11 (2 Ampere vCPU, arm64, 4 GB RAM, 40 GB disk), Ubuntu 24.04 | Owner's choice. The stack idles at ~0.9 GB without Ollama; 4 GB leaves room for LiteLLM's startup and a deploy pulling a 2 GB image |
+| Host | One Hetzner Cloud CAX11 (2 Ampere vCPU, arm64, 4 GB RAM, 40 GB disk), Ubuntu 26.04 (24.04 also supported) | Owner's choice. The stack idles at ~0.9 GB without Ollama; 4 GB leaves room for LiteLLM's startup and a deploy pulling a 2 GB image |
 | CPU architecture | arm64 images only, built on GitHub's native `ubuntu-24.04-arm` runners | Every pinned base image (`python:3.14-slim`, `litellm:v1.106.1`, `uv:0.13.6`, `postgres:18.6`) is a multi-platform index with `linux/arm64`, so no Dockerfile or Compose change. Native runners are free for public repos; QEMU emulation would make the LiteLLM patch step very slow |
 | Orchestration | Docker Compose, `compose.yaml` + `compose.prod.yaml` override | Architecture §9; the base file stays the single source of truth, so dev and prod cannot drift |
 | Registry | GHCR, public packages, tag = full commit SHA | The repo is public: the server pulls without credentials and CI pushes with `GITHUB_TOKEN` |
@@ -177,7 +177,7 @@ Expected size: an interaction plus its LiteLLM spend log is tens of KB; even at 
 
 ## 10. Server setup
 
-`deploy/server/setup.sh`, run once as root on a fresh Ubuntu 24.04 CAX11, safe to re-run. Arguments: the owner's username, CI's public deploy key and the Storage Box hostname (`uNNNNNN.your-storagebox.de`).
+`deploy/server/setup.sh`, run once as root on a fresh Ubuntu 24.04 or 26.04 CAX11, safe to re-run. Arguments: the owner's username, CI's public deploy key and the Storage Box hostname (`uNNNNNN.your-storagebox.de`).
 
 - Creates the owner (sudo, copies root's `authorized_keys` that Hetzner installed) and `deploy`.
 - Installs Docker Engine and the Compose plugin from Docker's apt repository.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepares a fresh Ubuntu 24.04 server (Hetzner CAX11, arm64) for engleks. Run as root:
+# Prepares a fresh Ubuntu 24.04 or 26.04 server (Hetzner CAX11, arm64) for engleks. Run as root:
 #
 #   setup.sh <owner> '<CI public deploy key>' <storage box host, uNNNNNN.your-storagebox.de>
 #
@@ -62,8 +62,11 @@ if [[ ! -s /etc/apt/keyrings/docker.asc ]]; then
   chmod a+r /etc/apt/keyrings/docker.asc
 fi
 arch=$(dpkg --print-architecture)
+# Docker's suite for this release (noble, resolute); apt-get update fails if Docker has none.
+codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
+[[ -n $codename ]] || die "no VERSION_CODENAME in /etc/os-release"
 write_if_changed /etc/apt/sources.list.d/docker.list 0644 <<EOF || true
-deb [arch=$arch signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable
+deb [arch=$arch signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $codename stable
 EOF
 apt-get update -q
 apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin \
@@ -143,7 +146,7 @@ KbdInteractiveAuthentication no
 PermitRootLogin no
 EOF
   sshd -t
-  # Ubuntu 24.04 starts ssh.service from ssh.socket; an inactive service reads the file on start.
+  # Ubuntu 24.04+ starts ssh.service from ssh.socket; an inactive service reads the file on start.
   systemctl try-reload-or-restart ssh
 fi
 

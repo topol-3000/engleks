@@ -1,6 +1,6 @@
 # Deployment: running engleks in production
 
-Production is one Hetzner Cloud CAX11 (arm64, Ubuntu 24.04) running the Compose stack.
+Production is one Hetzner Cloud CAX11 (arm64, Ubuntu 26.04; 24.04 also works) running the Compose stack.
 CI builds arm64 images, scans them and pushes them to GHCR as
 `ghcr.io/topol-3000/engleks-{api,bot,litellm}:<commit sha>`. Every green push to `main`
 is deployed automatically by the **Deploy** workflow, which SSHes to the server; a forced
@@ -85,7 +85,7 @@ In the Hetzner Cloud console:
 
 - Create a **Firewall** with two inbound rules: TCP 22 and ICMP, from anywhere. Nothing
   else: every port Compose publishes is bound to 127.0.0.1.
-- Create a **CAX11** server with **Ubuntu 24.04**, your SSH key, and the firewall.
+- Create a **CAX11** server with **Ubuntu 26.04** (or 24.04), your SSH key, and the firewall.
 
 ### 6. Run setup.sh
 
