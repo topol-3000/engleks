@@ -1,0 +1,59 @@
+# Deploys a commit to the production server over SSH. The server's forced command
+# (deploy/server/engleks-deploy) does the work and rolls back on failure; this job only
+# streams its output and turns red when it exits non-zero.
+#
+# A separate workflow because CI cancels its in-progress runs on every push, and a deploy
+# must never be interrupted halfway. Runs automatically after a green CI run for a push to
+# main; "Run workflow" with an older SHA rolls back.
+#
+# Deploys run one at a time and are never cancelled. GitHub keeps only the newest pending
+# run in a concurrency group, so when several merges land during a deploy, the SHAs in
+# between may be skipped; the newest one still deploys.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-character commit SHA whose images are in GHCR
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - name: Deploy over SSH
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || inputs.sha }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [[ ! $SHA =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::not a full lowercase commit SHA: $SHA"
+            exit 1
+          fi
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/deploy_known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/deploy_known_hosts \
+            -o ServerAliveInterval=30 "deploy@$DEPLOY_HOST" "$SHA"
