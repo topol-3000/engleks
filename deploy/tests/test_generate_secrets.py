@@ -1,6 +1,8 @@
 """generate-secrets.sh prints the owner's generated secrets as dotenv lines."""
 
+import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -35,12 +37,6 @@ def test_prints_each_name_once_with_the_right_format():
         assert re.fullmatch(pattern, value), name
 
 
-def test_each_name_appears_once():
-    lines, _ = generate()
-    names = [line.split("=", 1)[0] for line in lines]
-    assert sorted(names) == sorted(NAMES)
-
-
 def test_values_are_distinct():
     lines, _ = generate()
     values = list(parse(lines).values())
@@ -58,3 +54,15 @@ def test_guidance_goes_to_stderr_not_stdout():
     assert all(re.fullmatch(r"[A-Z_]+=\S+", line) for line in lines)
     assert "RESTIC_PASSWORD" in stderr
     assert not any(v in stderr for v in parse(lines).values())
+
+
+def test_openssl_failure_prints_nothing_and_fails(tmp_path: Path):
+    stub = tmp_path / "openssl"
+    stub.write_text("#!/bin/sh\nexit 1\n")
+    stub.chmod(0o755)
+    env = {**os.environ, "PATH": f"{tmp_path}:/usr/bin:/bin"}
+    bash = shutil.which("bash")
+    assert bash
+    r = subprocess.run([bash, str(SCRIPT)], capture_output=True, text=True, env=env, check=False)
+    assert r.returncode != 0
+    assert r.stdout == ""

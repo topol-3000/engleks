@@ -20,10 +20,21 @@ random_hex() {
   openssl rand -hex 32
 }
 
-echo "API_DB_PASSWORD=$(random_hex)"
-echo "LITELLM_DB_PASSWORD=$(random_hex)"
-echo "BOT_SERVICE_TOKEN=$(random_hex)"
-echo "LITELLM_MASTER_KEY=sk-$(random_hex)"
-echo "LITELLM_UI_PASSWORD=$(random_hex)"
-echo "API_LLM_API_KEY=sk-$(random_hex)"
-echo "RESTIC_PASSWORD=$(random_hex)"
+# Plain assignments, so a failing openssl aborts the script (set -e) before anything is
+# printed: no partial set of secrets can reach stdout.
+api_db_password=$(random_hex)
+litellm_db_password=$(random_hex)
+bot_service_token=$(random_hex)
+litellm_master_key=sk-$(random_hex)
+litellm_ui_password=$(random_hex)
+api_llm_api_key=sk-$(random_hex)
+restic_password=$(random_hex)
+
+printf '%s\n' \
+  "API_DB_PASSWORD=$api_db_password" \
+  "LITELLM_DB_PASSWORD=$litellm_db_password" \
+  "BOT_SERVICE_TOKEN=$bot_service_token" \
+  "LITELLM_MASTER_KEY=$litellm_master_key" \
+  "LITELLM_UI_PASSWORD=$litellm_ui_password" \
+  "API_LLM_API_KEY=$api_llm_api_key" \
+  "RESTIC_PASSWORD=$restic_password"
