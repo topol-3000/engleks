@@ -4,7 +4,7 @@
 
 A trainer for English writing, not a translator. The MVP includes:
 
-- **Improve**: one prompt (`process_text.v5`) corrects the text and returns up to five short lessons in English: reusable language patterns drawn from the edits, not an edit log.
+- **Improve**: one prompt (`process_text.v6`) corrects the text and returns up to three short lessons in English: reusable language patterns drawn from the edits, not an edit log.
 - **Translate**: UA/RU → EN with automatic language detection, in the same LLM call and with the same English lessons as Improve.
 - **Context profiles**: 2–3 per user, plus request history.
 - **Multiple users**: invite codes, usage limits and a simple admin dashboard.

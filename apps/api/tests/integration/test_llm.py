@@ -27,7 +27,7 @@ async def test_english_text_gets_corrected_with_lessons(rewriter):
     text = "Yesterday I go to shop and buy two apple."
     out = await rewriter.rewrite(text)
     assert out.source_language is Language.EN and out.output_text != text
-    assert 1 <= len(out.explanations) <= 5
+    assert 1 <= len(out.explanations) <= 3
 
 
 async def test_ukrainian_text_is_translated(rewriter):
