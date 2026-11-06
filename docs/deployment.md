@@ -75,12 +75,13 @@ your profile → **Packages** → `engleks-api` → **Package settings** → **C
   its ping URL (`https://hc-ping.com/<uuid>`). Treat it as a secret: anyone with it can
   report a backup as done. It becomes `HEALTHCHECKS_BACKUP_URL` in Infisical (step 6).
 
-### 3. OpenAI API key and budget
+### 3. Anthropic API key and budget
 
-Production runs on OpenAI's `gpt-6.1-terra`. In the OpenAI platform, create a project
-for engleks and an API key in it, and set a monthly budget on the project (Settings →
-Limits). This is the second guard, behind LiteLLM's cap. An Anthropic key is optional: it
-only serves the `claude-*` aliases in `deploy/litellm/config.yaml`.
+Production runs on Claude Haiku 5.5 (`claude-haiku-5-5`). In the Claude Console, create a
+workspace for engleks and an API key in it, and set a monthly spend limit on the workspace.
+This is the second guard, behind LiteLLM's cap. An OpenAI key serves `gpt-6.1-terra`, which
+production ran before; keep a valid one in Infisical while you may roll back to a commit
+whose `deploy/prod.env` still names it.
 
 ### 4. CI's SSH key
 
@@ -131,8 +132,8 @@ Add these four by hand, as secrets named exactly so:
 | Secret | Value |
 | --- | --- |
 | `BOT_TELEGRAM_TOKEN` | the token from @BotFather |
-| `OPENAI_API_KEY` | the OpenAI API key from step 3 |
-| `ANTHROPIC_API_KEY` | `unused`, or an Anthropic key for the `claude-*` aliases |
+| `OPENAI_API_KEY` | an OpenAI API key for `gpt-6.1-terra` (step 3), or `unused` |
+| `ANTHROPIC_API_KEY` | the Anthropic API key from step 3 |
 | `HEALTHCHECKS_BACKUP_URL` | the ping URL from step 2 |
 
 The names in `deploy/secrets.txt` are exactly these eleven; every one is required. A value

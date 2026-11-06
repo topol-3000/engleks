@@ -6,7 +6,7 @@ model_list:
       model: os.environ/LLM_UPSTREAM_MODEL
       api_base: os.environ/LLM_UPSTREAM_API_BASE
       api_key: os.environ/OPENAI_API_KEY
-  # Production's model (API_LLM_MODEL). The pinned LiteLLM's price map has no gpt-6.1-terra,
+  # Production's model before claude-haiku-5-5. The pinned LiteLLM's price map has no gpt-6.1-terra,
   # and without prices spend stays 0 and the API key's budget never trips: keep these in
   # step with https://developers.openai.com/api/docs/pricing (standard tier, per token).
   - model_name: gpt-6.1-terra
@@ -22,6 +22,7 @@ model_list:
     litellm_params:
       model: anthropic/claude-sonnet-5-5   # key: ANTHROPIC_API_KEY in the proxy's environment
       drop_params: true   # it accepts only temperature=1; the API asks for 0.2
+  # Production's model (API_LLM_MODEL). The pinned LiteLLM prices it ($0.10 / $0.50 per 1M).
   - model_name: claude-haiku-5-5
     litellm_params:
       model: anthropic/claude-haiku-5-5

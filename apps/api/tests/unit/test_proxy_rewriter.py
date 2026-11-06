@@ -18,7 +18,7 @@ from engleks_api.infra.llm.proxy_rewriter import ProxyRewriter
 Handler = Callable[[httpx2.Request], httpx2.Response]
 
 TEXT = "He go home."
-V5_PROMPT = Path(engleks_api.infra.llm.__file__).parent / "prompts" / "process_text.v5.j2"
+V6_PROMPT = Path(engleks_api.infra.llm.__file__).parent / "prompts" / "process_text.v6.j2"
 VALID = json.dumps(
     {
         "source_language": "en",
@@ -79,7 +79,7 @@ async def test_valid_reply():
     assert (out.source_language, out.output_text) == (Language.EN, "He goes home.")
     assert out.explanations == ["Add -s to the verb after he, she or it: 'He goes home.'"]
     assert out.usage == Usage(
-        "ollama_chat/gemma3:4b", "process_text.v5", 100, 50, Decimal("0.0001")
+        "ollama_chat/gemma3:4b", "process_text.v6", 100, 50, Decimal("0.0001")
     )
     assert out.llm_response == json.loads(VALID)
 
@@ -110,11 +110,11 @@ async def test_user_text_is_wrapped_verbatim():
     assert user["content"] == f"<text>{text}</text>"
 
 
-async def test_system_prompt_is_v5_verbatim():
+async def test_system_prompt_is_v6_verbatim():
     seen: list[httpx2.Request] = []
     await make(recording([completion(VALID)], seen)).rewrite(TEXT)
     system = json.loads(seen[0].content)["messages"][0]["content"]
-    assert system == V5_PROMPT.read_text().rstrip("\n")
+    assert system == V6_PROMPT.read_text().rstrip("\n")
 
 
 async def test_invalid_then_valid_sends_correction_and_sums_usage():
@@ -205,7 +205,7 @@ async def test_first_invalid_then_failure_usage_is_first_attempt(second, reason)
     assert e.value.reason == reason
     assert e.value.usage is not None
     assert (e.value.usage.tokens_in, e.value.usage.tokens_out) == (100, 50)
-    assert e.value.usage.prompt_version == "process_text.v5"
+    assert e.value.usage.prompt_version == "process_text.v6"
 
 
 async def test_model_falls_back_to_body_without_upstream_header():
