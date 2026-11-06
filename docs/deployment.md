@@ -136,7 +136,7 @@ Add these four by hand, as secrets named exactly so:
 | `HEALTHCHECKS_BACKUP_URL` | the ping URL from step 2 |
 
 The names in `deploy/secrets.txt` are exactly these eleven; every one is required. A value
-must be non-empty and contain no whitespace, quotes, `$`, `#` or backslashes: a key pasted
+must be non-empty and contain no whitespace, quotes, backticks, `$`, `#` or backslashes: a key pasted
 with a trailing newline or space makes the deploy fail, naming the key. If you ever type
 `API_LLM_API_KEY` by hand instead of generating it, it must start with `sk-` and be at least
 16 characters long (LiteLLM refuses shorter keys).
@@ -148,7 +148,8 @@ The server reads the secrets with a read-only machine identity. In Infisical (Or
 
 - **Authentication**: Universal Auth, with a short **access token TTL** (for example 10
   minutes; a deploy uses the token once).
-- **Trusted IPs**: the server's IPv4 address **and its IPv6 /64** from step 5. Hetzner
+- **Trusted IPs**: the server's IPv4 address **and its IPv6 /64** (from step 5; on an existing
+  server, read them in the Hetzner console or with `ip -br addr`). Hetzner
   servers have IPv6 and `curl` prefers it, so with the IPv4 address alone the login comes
   from an address Infisical rejects.
 - Add the identity to the project `engleks` with a **read-only role on `prod`** (the
@@ -283,8 +284,9 @@ not stop it), and the run turns red. This holds for a redeploy of the running SH
 failed secret change goes back to the old secrets. Read the run's log for the cause. The
 server keeps the last deploy's output in `/opt/engleks/.deploy.log`; a deploy finishes (or
 rolls back) even if the Actions run is cancelled or loses its connection, and that file then
-shows how it ended. If the rollback fails too, `.env.previous` stays for whoever repairs the
-server. The bot is down for a few seconds per deploy; Telegram keeps the messages sent
+shows how it ended. If the rollback fails before it restores `.env`, `.env.previous` (the
+running secrets) stays for whoever repairs the server; after that point `.env` already holds
+the previous values. The bot is down for a few seconds per deploy; Telegram keeps the messages sent
 meanwhile.
 
 Deploys run one at a time. If several merges land while one deploys, only the newest
@@ -412,7 +414,9 @@ Then change `RESTIC_PASSWORD` in Infisical, update the copy in your password man
 **Run workflow**. The deploy opens the repository with the new password before it changes
 anything, and refuses (the run fails, the server stays on the old release) if the
 repository does not accept it. Do the re-key first: a deploy with the new value before it
-fails and changes nothing.
+fails and changes nothing. Do the three steps back to back: until the deploy installs the
+new `.env`, the nightly backup and an automatic rollback still use the old password, which
+the repository no longer accepts.
 
 ### Updating the server scripts
 
@@ -507,9 +511,13 @@ deploy generates it, and the dumps hold no role passwords.
    server, and **Run workflow** with the input empty. The deploy renders `.env`, opens the
    existing restic repository (no `restic init`), and starts the stack on empty databases.
 3. As `deploy` in `/opt/engleks`, restore both dumps as in "Restore on the same server".
-   The deploy already created the API's LiteLLM key; the restored `litellm` database holds
-   the same key, so nothing else is needed.
-4. `sudo systemctl start engleks-backup` and check healthchecks.io.
+   With the old Infisical project, `API_LLM_API_KEY` is unchanged and the restored
+   `litellm` database holds that key. Restoring replaces the database the deploy just
+   filled, though, so a key the deploy created (a new Infisical project has a new
+   `API_LLM_API_KEY`) is gone again.
+4. **Run workflow** once more, input empty. The deploy ensures the API's LiteLLM key
+   against the restored database: it exists, or it is created with the cap.
+5. `sudo systemctl start engleks-backup` and check healthchecks.io.
 
 If the Infisical account itself is lost, create a new project, run
 `generate-secrets.sh` again but keep the saved `RESTIC_PASSWORD` instead of the generated
@@ -525,9 +533,12 @@ Once, for the server that runs today with a hand-made `.env`. Do the steps in th
    the existing `.env`: it ignores `deploy/prod.env`, and the new `engleks.secrets` label
    falls back to `dev`. Nothing changes for users.
 2. **Infisical.** Create the project, `prod` environment and the machine identity as in
-   first-time setup steps 6 and 7, but **import today's values, do not generate new ones**.
+   first-time setup steps 6 and 7 (the server already exists: read its IPv4 address and IPv6 /64
+   in the Hetzner console or with `ip -br addr`), but **import today's values, do not generate new ones**.
    As `deploy` in `/opt/engleks`, print the secret lines of the current `.env`, copy them
-   into Infisical's ".env import" with the same names and values, and clear the terminal:
+   into Infisical's ".env import" with the same names and values, and clear the terminal.
+   Render rejects an empty secret, so import any empty value (typically `ANTHROPIC_API_KEY`)
+   as `unused`, or as a real value:
 
    ```bash
    grep -E '^(BOT_TELEGRAM_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|HEALTHCHECKS_BACKUP_URL|API_DB_PASSWORD|LITELLM_DB_PASSWORD|BOT_SERVICE_TOKEN|LITELLM_MASTER_KEY|LITELLM_UI_PASSWORD|API_LLM_API_KEY|RESTIC_PASSWORD)=' .env
@@ -543,14 +554,16 @@ Once, for the server that runs today with a hand-made `.env`. Do the steps in th
    scripts", and enter the credentials. This installs the new `engleks-deploy`,
    `engleks-render-env` and `engleks-backup`.
 4. **Run workflow** (input empty). The values are the same, so nothing is reconciled: no
-   `ALTER ROLE`, the LiteLLM key exists (its model list is synced), restic opens. The
-   services are recreated once, because the label is new. Check:
+   `ALTER ROLE`, the LiteLLM key exists (its model list is synced), and the restic check is
+   skipped because the repository and password are unchanged. The services are recreated
+   once, because the label is new. Check:
    - the Deploy run is green (if the render step fails, the server stays on the running
      release; `/opt/engleks/.deploy.log` and the run's log name the cause);
    - `docker inspect --format '{{ index .Config.Labels "engleks.secrets" }}' "$(docker compose ps -q api)"`
      prints a 64-character hash, not `dev`;
    - the bot answers;
-   - `sudo systemctl start engleks-backup` turns the healthchecks.io check green.
+   - `sudo systemctl start engleks-backup` turns the healthchecks.io check green (this is
+     the proof that restic still opens the repository).
 5. **Clean up.** Delete the full `.env` copy from the password manager; keep only
    `RESTIC_PASSWORD`. Snapshots made before the move still contain `.env`; they age out under
    the retention (up to six months), or delete them with `restic forget --prune`.

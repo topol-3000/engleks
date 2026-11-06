@@ -25,7 +25,7 @@ automatic deploys from `main`, nightly backups), **Admin dashboard**.
 | Lint, format check, types, import contracts | `make lint` |
 | Autofix | `make fmt` |
 | All tests (integration ones need Docker) | `make test` |
-| Tests without Docker | `uv run pytest packages/contracts/tests apps/api/tests/unit apps/bot/tests deploy/tests` |
+| Tests without Docker | `uv run pytest packages/contracts/tests apps/api/tests/unit apps/bot/tests deploy/tests` (`deploy/tests` needs `jq`) |
 | Server script tests | `uv run pytest deploy/tests` |
 | One test | `uv run pytest apps/api/tests/unit/test_x.py -k name` |
 | Tests that call a real LLM | `make test-llm` |
