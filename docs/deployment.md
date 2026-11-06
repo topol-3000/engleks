@@ -151,7 +151,9 @@ The server reads the secrets with a read-only machine identity. In Infisical (Or
 - **Trusted IPs**: the server's IPv4 address **and its IPv6 /64** (from step 5; on an existing
   server, read them in the Hetzner console or with `ip -br addr`). Hetzner
   servers have IPv6 and `curl` prefers it, so with the IPv4 address alone the login comes
-  from an address Infisical rejects.
+  from an address Infisical rejects. Universal Auth has two lists, **Client Secret Trusted
+  IPs** and **Access Token Trusted IPs**: set both to these addresses (the client-secret
+  one is the minimum, because it guards the login).
 - Add the identity to the project `engleks` with a **read-only role on `prod`** (the
   built-in Viewer role, or a custom one limited to `prod`).
 - Create a **client secret** for it. Keep its **client ID** and the secret at hand for
@@ -224,7 +226,8 @@ Check the `DEPLOY_KNOWN_HOSTS` key before saving it: its fingerprint
 ### 11. First deploy and first backup
 
 - **Actions → Deploy → Run workflow**, from `main`, with the input left empty. The run
-  deploys `main`'s head, streams the server's output and turns green when every service
+  deploys `main`'s head (whatever its CI status; here, wait for a green CI run on it first),
+  streams the server's output and turns green when every service
   is healthy. A first deploy renders `.env` from `deploy/prod.env` and Infisical, starts
   the stack, runs `restic init` on the Storage Box and creates the API's LiteLLM key with
   the $10 per 30 days cap.
@@ -252,7 +255,9 @@ A merge to `main` runs CI. When CI is green, the Deploy workflow runs
 `ssh deploy@<server> <sha>`. **Actions → Deploy → Run workflow** does the same by hand:
 with the input empty it deploys the head of the branch picked in "Use workflow from" (use
 it to apply a changed secret; the `production` environment accepts only `main`), and with a
-full SHA it rolls back to that commit. `engleks-deploy` on the server:
+full SHA it rolls back to that commit. The head is deployed whatever its CI status: if it is
+not the running release or its CI is red or running, enter the running SHA instead (see
+"Changing a secret"). `engleks-deploy` on the server:
 
 1. takes a lock (`/opt/engleks/.deploy.lock`), so deploys and backups never overlap, and
    deletes a `.env.previous` that a killed run left behind;
@@ -377,7 +382,11 @@ and spend). Going back is another PR (or a rollback to the earlier commit).
 ### Changing a secret
 
 Secrets live in Infisical (project `engleks`, environment `prod`). Edit the value there,
-then **Actions → Deploy → Run workflow** from `main` with the input empty. Nobody logs in to
+then **Actions → Deploy → Run workflow** from `main` with the input empty. An empty input
+deploys `main`'s head, whatever its CI status. If `main`'s head is not the running release
+(`ENGLEKS_TAG` in the server's `.env`, or the SHA of the last green Deploy run), or its CI is
+red or still running, enter the running SHA in the input instead, so that only the secrets
+change. Nobody logs in to
 the server, and nobody edits `.env`: the deploy renders it again, recreates `migrate`,
 `api`, `litellm` and `bot` (the changed `ENGLEKS_SECRETS_HASH` label forces it; Compose
 ignores a changed secret value on its own), and reconciles what holds a copy of the value:
@@ -522,7 +531,9 @@ deploy generates it, and the dumps hold no role passwords.
 If the Infisical account itself is lost, create a new project, run
 `generate-secrets.sh` again but keep the saved `RESTIC_PASSWORD` instead of the generated
 one, and re-issue the third-party keys (BotFather token, OpenAI, Anthropic, healthchecks.io
-URL). On a new server that is all; on a running server the deploy then applies the new
+URL). On a new server that is all; on a running server, first delete
+`~deploy/.config/engleks/infisical` and re-run `setup.sh` with the new project ID and
+identity (`setup.sh` keeps an existing credential file), and then the deploy applies the new
 database passwords and LiteLLM key.
 
 ## Moving to Infisical
@@ -531,7 +542,9 @@ Once, for the server that runs today with a hand-made `.env`. Do the steps in th
 
 1. **Merge** the branch. The installed (old) `engleks-deploy` deploys the new commit with
    the existing `.env`: it ignores `deploy/prod.env`, and the new `engleks.secrets` label
-   falls back to `dev`. Nothing changes for users.
+   falls back to `dev`. Nothing changes for users. Check that the merge's Deploy run is
+   green before going on: if it rolled back to the pre-merge commit, a later failure would
+   roll back to a commit whose `generate_key.py` lacks `--ensure-stdin`.
 2. **Infisical.** Create the project, `prod` environment and the machine identity as in
    first-time setup steps 6 and 7 (the server already exists: read its IPv4 address and IPv6 /64
    in the Hetzner console or with `ip -br addr`), but **import today's values, do not generate new ones**.
