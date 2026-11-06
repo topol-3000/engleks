@@ -76,14 +76,7 @@ def rendered_env(tag: str, secrets: dict[str, str] = DEFAULT_SECRETS) -> str:
     )
 
 
-DEFAULT_ENV = f"""\
-COMPOSE_FILE=compose.yaml:compose.prod.yaml
-ENGLEKS_TAG={PREV}
-API_DB_PASSWORD=secret
-RESTIC_REPOSITORY=sftp:storagebox:engleks
-RESTIC_PASSWORD=s3cret-restic
-HEALTHCHECKS_BACKUP_URL={HC}
-"""
+DEFAULT_ENV = rendered_env(PREV)
 
 STUB = r"""#!/usr/bin/env bash
 name=$(basename "$0"); line="$name $*"
