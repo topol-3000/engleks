@@ -17,7 +17,7 @@ RUN apk upgrade --no-cache && apk add --no-cache ca-certificates-bundle=20260909
 RUN --mount=from=ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0,source=/uv,target=/bin/uv \
     UV_NO_CACHE=1 uv pip install --python /app/.venv/bin/python \
         aiohttp==3.14.4 certifi==2026.10.18 ddtrace==4.15.6 dnspython==2.9.0 \
-        filelock==4.2.1 pyasn1==0.6.5 pypdf==6.21.4 \
+        filelock==4.2.1 oauthlib==4.0.1 pyasn1==0.6.5 pypdf==6.21.4 \
         ddtrace-internal==0.1.0 yarl==1.25.1 \
     && UV_NO_CACHE=1 uv pip install --python /opt/liteadmin/bin/python \
         aiohttp==3.14.4 certifi==2026.10.18

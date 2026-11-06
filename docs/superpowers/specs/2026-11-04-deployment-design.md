@@ -89,6 +89,8 @@ The prod `.env` also sets `LLM_UPSTREAM_MODEL`, `LLM_UPSTREAM_API_BASE`, `API_LL
 
 ## 6. Secrets
 
+Replaced by the [Secrets Management design](2026-11-06-secrets-management-design.md): `.env` is generated on every deploy and `bootstrap-env.sh` is gone.
+
 `deploy/server/bootstrap-env.sh`, run once by hand as `deploy` in `/opt/engleks`, refuses to run if `.env` exists. It:
 
 1. Generates random values for `API_DB_PASSWORD`, `LITELLM_DB_PASSWORD` (letters and digits only: it goes into a URL), `BOT_SERVICE_TOKEN`, `LITELLM_MASTER_KEY` (`sk-` prefix) and `LITELLM_UI_PASSWORD`; sets `LITELLM_UI_USERNAME=admin`.

@@ -10,4 +10,4 @@ repos:
     hooks:
       - id: shellcheck
         # Matched by shebang too, so engleks-deploy and engleks-backup (no .sh) are checked.
-        files: ^deploy/server/
+        files: ^deploy/(server|infisical)/

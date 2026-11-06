@@ -4,7 +4,8 @@
 #
 # A separate workflow because CI cancels its in-progress runs on every push, and a deploy
 # must never be interrupted halfway. Runs automatically after a green CI run for a push to
-# main; "Run workflow" with an older SHA rolls back.
+# main. "Run workflow" with an empty SHA deploys the head of the selected branch (to apply a
+# changed secret); with a full SHA it rolls back to that commit.
 #
 # Deploys run one at a time and are never cancelled. GitHub keeps only the newest pending
 # run in a concurrency group, so when several merges land during a deploy, the SHAs in
@@ -19,8 +20,9 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: Full 40-character commit SHA whose images are in GHCR
-        required: true
+        description: >-
+          Empty: deploy the head of the branch picked above. A full SHA: roll back to that commit
+        required: false
         type: string
 
 permissions: {}
@@ -44,7 +46,7 @@ jobs:
     steps:
       - name: Deploy over SSH
         env:
-          SHA: ${{ github.event.workflow_run.head_sha || inputs.sha }}
+          SHA: ${{ github.event.workflow_run.head_sha || inputs.sha || github.sha }}
           EVENT: ${{ github.event_name }}
           REPO: ${{ github.repository }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}

@@ -5,7 +5,8 @@
 #
 # Every step checks before it acts, so it is safe to run again. Running it again is also
 # how a change to engleks-deploy, engleks-backup or their systemd units reaches the server:
-# it installs them from the checkout in /opt/engleks. See docs/deployment.md.
+# it installs them from the checkout in /opt/engleks. It also asks for the Infisical
+# credentials once, if their file is missing. See docs/deployment.md.
 set -euo pipefail
 
 REPO_URL=https://github.com/topol-3000/engleks.git
@@ -53,7 +54,7 @@ write_if_changed() {
 step "packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q ca-certificates curl git make openssl restic unattended-upgrades
+apt-get install -y -q ca-certificates curl git jq make openssl restic unattended-upgrades
 
 step "docker"
 install -m 0755 -d /etc/apt/keyrings
@@ -159,6 +160,8 @@ fi
 step "deploy and backup scripts"
 install -m 0755 -o root -g root "$ENGLEKS_DIR/deploy/server/engleks-deploy" \
   /usr/local/bin/engleks-deploy
+install -m 0755 -o root -g root "$ENGLEKS_DIR/deploy/server/engleks-render-env" \
+  /usr/local/bin/engleks-render-env
 install -m 0755 -o root -g root "$ENGLEKS_DIR/deploy/server/engleks-backup" \
   /usr/local/bin/engleks-backup
 install -m 0644 -o root -g root "$ENGLEKS_DIR/deploy/server/engleks-backup.service" \
@@ -166,6 +169,43 @@ install -m 0644 -o root -g root "$ENGLEKS_DIR/deploy/server/engleks-backup.servi
 systemctl daemon-reload
 systemctl enable --now engleks-backup.timer
 install -d -m 0700 -o deploy -g deploy "$BACKUP_DIR"
+
+step "infisical credentials"
+infisical_file=$deploy_home/.config/engleks/infisical
+if [[ -f $infisical_file ]]; then
+  echo "$infisical_file exists; leaving it as it is"
+else
+  # Reads one value; it must be non-empty and made of letters, digits, . _ and -.
+  ask_credential() {
+    local var=$1 prompt=$2 secret=${3:-} value=""
+    if [[ -n $secret ]]; then
+      IFS= read -rsp "$prompt: " value || true
+      if [[ -t 0 ]]; then echo >&2; fi
+    else
+      IFS= read -rp "$prompt: " value || true
+    fi
+    [[ -n $value ]] || die "$var is required"
+    [[ $value =~ ^[A-Za-z0-9._-]+$ ]] || die "$var must contain only letters, digits, . _ and -"
+    printf -v "$var" '%s' "$value"
+  }
+  project_id="" client_id="" client_secret=""
+  ask_credential project_id "Infisical project ID"
+  ask_credential client_id "Infisical client ID (machine identity engleks-prod-server)"
+  ask_credential client_secret "Infisical client secret (not shown)" secret
+  install -d -m 0700 -o deploy -g deploy "$deploy_home/.config" "$deploy_home/.config/engleks"
+  # printf is a builtin, so the secret never reaches a process's argv.
+  cred_tmp=$(mktemp)
+  trap 'rm -f "$cred_tmp"' EXIT
+  printf '%s\n' \
+    "INFISICAL_API_URL=https://eu.infisical.com" \
+    "INFISICAL_PROJECT_ID=$project_id" \
+    "INFISICAL_ENVIRONMENT=prod" \
+    "INFISICAL_CLIENT_ID=$client_id" \
+    "INFISICAL_CLIENT_SECRET=$client_secret" >"$cred_tmp"
+  install -m 0600 -o deploy -g deploy "$cred_tmp" "$infisical_file"
+  rm -f "$cred_tmp"
+  unset client_secret
+fi
 
 step "storage box access for the backups"
 if [[ ! -f $deploy_home/.ssh/storagebox ]]; then
@@ -204,6 +244,6 @@ Setup done.
      sudo -iu deploy sh -c 'ssh -p 23 $box_user@$box_host install-ssh-key < ~/.ssh/storagebox.pub'
    The key:
 $(sed 's/^/     /' "$deploy_home/.ssh/storagebox.pub")
-3. Create .env:
-     sudo -iu deploy $ENGLEKS_DIR/deploy/server/bootstrap-env.sh
+3. Create the GitHub environment if it does not exist, then Actions → Deploy → Run workflow.
+   The first deploy renders .env from Infisical and starts the stack.
 EOF
