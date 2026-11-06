@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Nightly backup of engleks: dumps both databases, sends them and .env to the restic
-# repository on the Storage Box, applies retention and reports to healthchecks.io.
+# Nightly backup of engleks: dumps both databases, sends the dumps (only the dumps: .env is
+# generated from Infisical on every deploy) to the restic repository on the Storage Box,
+# applies retention and reports to healthchecks.io.
 #
 # Installed as /usr/local/bin/engleks-backup by setup.sh and run as `deploy` by
 # engleks-backup.service (engleks-backup.timer, 03:00 UTC). By hand:
@@ -77,7 +78,7 @@ docker compose exec -T postgres sh -c \
   >"$BACKUP_DIR/litellm.dump"
 
 echo "==> restic backup"
-restic backup "$BACKUP_DIR" "$ENV_FILE" --tag nightly --quiet
+restic backup "$BACKUP_DIR" --tag nightly --quiet
 echo "==> restic forget"
 restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune --quiet
 echo "==> done"

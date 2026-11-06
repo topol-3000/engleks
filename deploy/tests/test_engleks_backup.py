@@ -33,9 +33,7 @@ def test_success(server: Server):
         assert "pg_dump" in dump
         assert "--format=custom --compress=0" in dump
         assert f"-d {db}" in dump
-    assert backup_call.startswith(
-        f"restic backup {server.backups} {server.root}/.env --tag nightly"
-    )
+    assert backup_call.startswith(f"restic backup {server.backups} --tag nightly")
     assert backup_call.endswith("[engleks.dump litellm.dump]")
     assert forget.startswith(FORGET)
     assert done.startswith("curl ")
