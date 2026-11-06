@@ -45,3 +45,12 @@ def test_sources_disjoint_and_unique() -> None:
 def test_real_files_pass_the_value_rule() -> None:
     for key, value in prod_env():
         assert not BAD_VALUE.search(value), key
+
+
+def test_secret_label_on_app_services_only() -> None:
+    services = yaml.safe_load(Path(REPO / "compose.yaml").read_text())["services"]
+    expected = {"engleks.secrets": "${ENGLEKS_SECRETS_HASH:-dev}"}
+    for name in ("migrate", "api", "litellm", "bot"):
+        assert services[name].get("labels") == expected, name
+    for name in ("postgres", "ollama"):
+        assert "engleks.secrets" not in (services[name].get("labels") or {}), name
