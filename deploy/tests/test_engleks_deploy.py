@@ -41,8 +41,14 @@ def ops(server: Server) -> list[str]:
 
 
 def ALTER(role: str, value: str) -> str:
-    """What engleks-deploy pipes into psql to set ROLE's password to VALUE."""
-    return f"\\set pw '{value}'\nALTER ROLE {role} PASSWORD :'pw';"
+    """What engleks-deploy pipes into psql to set ROLE's password to VALUE.
+
+    The SET lines come first: psql substitutes :'pw' client-side, so a failed ALTER would
+    otherwise log the statement, password included, in the Postgres container log."""
+    return (
+        "SET log_min_error_statement = panic;\nSET log_statement = 'none';\n"
+        f"\\set pw '{value}'\nALTER ROLE {role} PASSWORD :'pw';"
+    )
 
 
 def given_input(command: str, value: str) -> str:
@@ -282,6 +288,22 @@ def test_stale_previous_env_is_not_restored(server: Server):
     assert r.returncode == 1
     assert server.env_text() == DEFAULT_ENV
     assert "ALTER ROLE" not in server.inputs()
+
+
+def test_failed_copy_of_env_does_not_clobber_env_on_rollback(server: Server):
+    # A disk-full `install .env .env.previous` leaves a truncated .env.previous. The rollback
+    # must not move it over the good .env.
+    install = server.root.parent / "bin" / "install"
+    install.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ ${*: -1} == *.env.previous ]]; then echo truncated > "${*: -1}"; exit 1; fi\n'
+        'exec /usr/bin/install "$@"\n'
+    )
+    install.chmod(0o755)
+    r = deploy(server)
+    assert r.returncode == 1
+    assert server.env_text() == DEFAULT_ENV
+    assert not (server.root / ".env.previous").exists()
 
 
 def test_failure_without_previous(server: Server):

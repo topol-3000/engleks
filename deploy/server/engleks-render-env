@@ -148,16 +148,21 @@ if ! response=$(curl -fsS --max-time 30 -H @<(printf 'Authorization: Bearer %s\n
   die "fetching the secrets from Infisical failed"
 fi
 # @tsv writes a newline in a value as the two characters \n, which check_value rejects.
-rows=$(jq -r '.secrets[] | [.secretKey, .secretValue] | @tsv' <<<"$response") \
+# The hidden flag comes before the value: an empty value must not shift the fields.
+rows=$(jq -r '.secrets[] | [.secretKey, (.secretValueHidden // false), .secretValue] | @tsv' <<<"$response") \
   || die "the Infisical secrets response is not the expected JSON"
 
 declare -A fetched=()
+declare -A masked=()
 fetched_names=()
 key=""
+hidden=""
 value=""
-while IFS=$'\t' read -r key value; do
+while IFS=$'\t' read -r key hidden value; do
   if [[ -z $key ]]; then continue; fi
   fetched[$key]=$value
+  # An identity that may list but not read values gets a flag and a public mask instead.
+  if [[ $hidden == true || $value == "<hidden-by-infisical>" ]]; then masked[$key]=1; fi
   fetched_names+=("$key")
 done <<<"$rows"
 echo "    ${#fetched_names[@]} secrets in Infisical"
@@ -166,6 +171,9 @@ echo "    ${#fetched_names[@]} secrets in Infisical"
 secret_lines=""
 for name in "${secret_names[@]}"; do
   if [[ ! -v fetched[$name] ]]; then die "$name is not in Infisical environment $environment"; fi
+  if [[ -v masked[$name] ]]; then
+    die "$name is hidden from the server's Infisical identity; grant it permission to read secret values"
+  fi
   if [[ -z ${fetched[$name]} ]]; then die "$name is empty in Infisical"; fi
   check_value "$name" "${fetched[$name]}"
   secret_lines+="$name=${fetched[$name]}"$'\n'

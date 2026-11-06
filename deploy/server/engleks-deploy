@@ -71,11 +71,15 @@ check_restic() {
 
 # alter_role ROLE PASSWORD: sets ROLE's password over Postgres' local socket. The value
 # reaches psql as a variable on stdin (printf is a builtin, so it is in no argument list);
-# the value rule forbids quotes and backslashes, so single-quoting it is safe.
+# the value rule forbids quotes and backslashes, so single-quoting it is safe. psql
+# substitutes :'pw' client-side, so a failed ALTER would log its text, password included,
+# in the Postgres log; the two SETs (superuser-only, which the container's user is) come
+# first in the same session to keep the statement out of it.
 alter_role() {
   echo "==> set the password of Postgres role $1"
   # shellcheck disable=SC2016 # $POSTGRES_USER and $POSTGRES_DB expand inside the container
-  printf '%s\n' "\\set pw '$2'" "ALTER ROLE $1 PASSWORD :'pw';" |
+  printf '%s\n' 'SET log_min_error_statement = panic;' "SET log_statement = 'none';" \
+    "\\set pw '$2'" "ALTER ROLE $1 PASSWORD :'pw';" |
     docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 }
 
@@ -106,7 +110,11 @@ deploy() {
     echo "==> render .env"
     engleks-render-env "$target" "$NEXT_FILE" || return 1
     if [[ -f $ENV_FILE ]]; then
-      install -m 600 "$ENV_FILE" "$PREVIOUS_FILE" || return 1
+      # A partial copy (disk full) must not survive: the rollback would install it.
+      install -m 600 "$ENV_FILE" "$PREVIOUS_FILE" || {
+        rm -f "$PREVIOUS_FILE"
+        return 1
+      }
     fi
     new_file=$NEXT_FILE
   elif [[ -f $PREVIOUS_FILE ]]; then

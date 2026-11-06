@@ -144,10 +144,17 @@ class Server:
         ]
         return tags[-1] if tags else None
 
-    def set_secrets(self, secrets: dict[str, str]) -> None:
-        """Sets what the fake Infisical returns for the secrets of the environment."""
+    def set_secrets(self, secrets: dict[str, str], hidden: tuple[str, ...] = ()) -> None:
+        """Sets what the fake Infisical returns for the secrets of the environment.
+
+        HIDDEN names the secrets the identity can list but not read: Infisical flags them
+        with secretValueHidden and masks the value."""
         body = {
-            "secrets": [{"secretKey": k, "secretValue": v} for k, v in secrets.items()],
+            "secrets": [
+                {"secretKey": k, "secretValue": v}
+                | ({"secretValueHidden": True} if k in hidden else {})
+                for k, v in secrets.items()
+            ],
             "imports": [],
         }
         (self.infisical / "secrets.json").write_text(json.dumps(body))

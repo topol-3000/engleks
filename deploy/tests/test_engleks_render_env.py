@@ -102,6 +102,30 @@ def test_empty_secret_fails(server: Server, tmp_path: Path) -> None:
     assert "API_LLM_API_KEY" in result.stderr
 
 
+@pytest.mark.parametrize("flagged", [True, False])
+def test_hidden_secret_fails(server: Server, tmp_path: Path, flagged: bool) -> None:
+    # An identity that may list but not read values gets secretValueHidden and the public
+    # mask "<hidden-by-infisical>", which passes the value rule. It must not reach .env.
+    value = "<hidden-by-infisical>"
+    secrets = {**DEFAULT_SECRETS, "RESTIC_PASSWORD": value}
+    server.set_secrets(secrets, hidden=("RESTIC_PASSWORD",) if flagged else ())
+    out = tmp_path / "out"
+    result = render(server, out)
+    assert result.returncode == 1
+    assert "RESTIC_PASSWORD" in result.stderr
+    assert value not in result.stdout
+    assert value not in result.stderr
+    assert not out.exists()
+
+
+def test_hidden_flag_fails_even_with_a_real_looking_value(server: Server, tmp_path: Path) -> None:
+    server.set_secrets(DEFAULT_SECRETS, hidden=("API_LLM_API_KEY",))
+    result = render(server, tmp_path / "out")
+    assert result.returncode == 1
+    assert "API_LLM_API_KEY" in result.stderr
+    assert DEFAULT_SECRETS["API_LLM_API_KEY"] not in result.stderr
+
+
 def test_name_in_both_sources_fails(server: Server, tmp_path: Path) -> None:
     append_to(server.root / "deploy" / "prod.env", "API_DB_PASSWORD=x\n")
     result = render(server, tmp_path / "out")
