@@ -3,7 +3,7 @@
 # fix patched in place. No upstream image both predates the 1.107.0 compromise and scans
 # clean, and `make scan` must report no fixable findings.
 # Pinned by digest: LiteLLM releases were compromised in 2026 (1.82.7, 1.82.8, 1.107.0).
-# This ARG is the only place the version lives: Compose, `make scan` and CI build this file.
+# This ARG is the only place the version lives: Compose and `make scan` build this file.
 ARG LITELLM_BASE_IMAGE=ghcr.io/berriai/litellm:v1.106.1@sha256:1acf80698f7eb47021b0bf5aed01ba9e80098cf74cdb3e588515bdd48a129fa6
 
 FROM ${LITELLM_BASE_IMAGE}

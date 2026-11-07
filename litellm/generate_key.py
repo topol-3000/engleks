@@ -2,11 +2,11 @@
 
 Run inside the litellm container:
 
-    python /deploy/generate_key.py
-    python /deploy/generate_key.py --max-budget 10 --budget-duration 30d
-    printf %s "$KEY" | python /deploy/generate_key.py --ensure-stdin --max-budget 10 \\
+    python /litellm/generate_key.py
+    python /litellm/generate_key.py --max-budget 10 --budget-duration 30d
+    printf %s "$KEY" | python /litellm/generate_key.py --ensure-stdin --max-budget 10 \\
         --budget-duration 30d
-    printf %s "$KEY" | python /deploy/generate_key.py --delete-stdin
+    printf %s "$KEY" | python /litellm/generate_key.py --delete-stdin
 
 The budget flags go together: a cap without a duration would never reset. When the cap is
 reached, LiteLLM rejects the key's calls until the period ends.

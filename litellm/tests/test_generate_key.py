@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "litellm" / "generate_key.py"
+_SCRIPT = Path(__file__).resolve().parents[1] / "generate_key.py"
 _spec = importlib.util.spec_from_file_location("generate_key", _SCRIPT)
 assert _spec is not None and _spec.loader is not None
 gk = importlib.util.module_from_spec(_spec)

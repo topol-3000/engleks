@@ -37,7 +37,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
       # Runs only on an empty data directory: creates the proxy's role and database.
-      - ./deploy/postgres/init-litellm.sh:/docker-entrypoint-initdb.d/10-litellm.sh:ro
+      - ./postgres/init-litellm.sh:/docker-entrypoint-initdb.d/10-litellm.sh:ro
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -83,17 +83,17 @@ services:
     restart: unless-stopped
 
   litellm:
-    # Our thin image over the digest-pinned upstream one: see deploy/litellm/Dockerfile.
+    # Our thin image over the digest-pinned upstream one: see litellm/Dockerfile.
     build:
-      context: deploy/litellm
+      context: litellm
     image: engleks-litellm:local
-    entrypoint: ["/bin/sh", "/deploy/entrypoint.sh"]
+    entrypoint: ["/bin/sh", "/litellm/entrypoint.sh"]
     environment:
       LLM_UPSTREAM_MODEL: ${LLM_UPSTREAM_MODEL:?set LLM_UPSTREAM_MODEL}
       LLM_UPSTREAM_API_BASE: ${LLM_UPSTREAM_API_BASE:?set LLM_UPSTREAM_API_BASE}
       LITELLM_LOG: INFO # the image defaults to DEBUG, which logs request bodies
     volumes:
-      - ./deploy/litellm:/deploy:ro
+      - ./litellm:/litellm:ro
     secrets:
       - litellm_master_key
       - litellm_db_password
@@ -102,7 +102,7 @@ services:
       - openai_api_key
       - anthropic_api_key
     networks: [default, llm]
-    # Admin UI at /ui: localhost only (prod: SSH tunnel).
+    # Admin UI at /ui: localhost only.
     ports:
       - "127.0.0.1:4000:4000"
     depends_on:

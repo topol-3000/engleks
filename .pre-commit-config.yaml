@@ -9,5 +9,4 @@ repos:
     rev: v0.11.0.1-1
     hooks:
       - id: shellcheck
-        # Matched by shebang too, so engleks-deploy and engleks-backup (no .sh) are checked.
-        files: ^deploy/(server|infisical)/
+        files: ^(litellm|postgres)/
