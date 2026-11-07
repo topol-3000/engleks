@@ -52,10 +52,6 @@ services:
     # Reuses the image built by the api service; building it twice in parallel collides.
     image: engleks-api:local
     pull_policy: never
-    # A changed secret changes this label, which recreates the service: Compose ignores changed
-    # secret values, and Postgres reads its passwords only at init.
-    labels:
-      engleks.secrets: ${ENGLEKS_SECRETS_HASH:-dev}
     command: ["alembic", "upgrade", "head"]
     environment: *api-env
     secrets: *api-secrets
@@ -67,8 +63,6 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    labels:
-      engleks.secrets: ${ENGLEKS_SECRETS_HASH:-dev}
     image: engleks-api:local
     environment: *api-env
     secrets: *api-secrets
@@ -93,8 +87,6 @@ services:
     build:
       context: deploy/litellm
     image: engleks-litellm:local
-    labels:
-      engleks.secrets: ${ENGLEKS_SECRETS_HASH:-dev}
     entrypoint: ["/bin/sh", "/deploy/entrypoint.sh"]
     environment:
       LLM_UPSTREAM_MODEL: ${LLM_UPSTREAM_MODEL:?set LLM_UPSTREAM_MODEL}
@@ -132,8 +124,6 @@ services:
     build:
       context: .
       dockerfile: apps/bot/Dockerfile
-    labels:
-      engleks.secrets: ${ENGLEKS_SECRETS_HASH:-dev}
     image: engleks-bot:local
     environment:
       BOT_API_BASE_URL: http://api:8000
