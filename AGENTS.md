@@ -10,12 +10,10 @@ This file is for coding agents. Read before changing anything big:
 - [docs/architecture.md](docs/architecture.md): MVP scope, components, main flow, data, API
 - [docs/superpowers/specs/2026-11-01-project-structure-design.md](docs/superpowers/specs/2026-11-01-project-structure-design.md):
   layout, tooling, runtime and CI decisions
-- [docs/deployment.md](docs/deployment.md): production server, deploys, rollback, backups (runbook)
 
 The MVP is built as sub-projects, each with its own spec: **Foundation** (done), **Core slice**
 (`ProcessText` end to end: LLM gateway, prompts, persistence), **Bot**, **Access**
-(invites, auth, rate limits, daily budget), **Deployment** (one arm64 server, GHCR images,
-automatic deploys from `main`, nightly backups), **Admin dashboard**.
+(invites, auth, rate limits, daily budget), **Admin dashboard**.
 
 ## Commands
 
@@ -25,8 +23,7 @@ automatic deploys from `main`, nightly backups), **Admin dashboard**.
 | Lint, format check, types, import contracts | `make lint` |
 | Autofix | `make fmt` |
 | All tests (integration ones need Docker) | `make test` |
-| Tests without Docker | `uv run pytest packages/contracts/tests apps/api/tests/unit apps/bot/tests deploy/tests` (`deploy/tests` needs `jq`) |
-| Server script tests | `uv run pytest deploy/tests` |
+| Tests without Docker | `uv run pytest packages/contracts/tests apps/api/tests/unit apps/bot/tests litellm/tests` |
 | One test | `uv run pytest apps/api/tests/unit/test_x.py -k name` |
 | Tests that call a real LLM | `make test-llm` |
 | Postgres for local runs | `make dev-db` |
@@ -36,8 +33,6 @@ automatic deploys from `main`, nightly backups), **Admin dashboard**.
 | Trivy scan | `make scan` |
 | Create an invite (stack running) | `make invite [note=..] [uses=..] [days=..]` |
 | Any admin command (stack running) | `make admin a="user disable <id>"` |
-| Deploy to production | automatic after a green CI run on `main` (Actions → Deploy); Run workflow with no input redeploys `main`'s head, e.g. after a secret change in Infisical |
-| Roll back production | Actions → Deploy → Run workflow with an older commit SHA |
 
 Run `make lint && make test` before saying a task is done. Add dependencies with
 `uv add --package engleks-api <pkg>` (or `engleks-bot`, `engleks-contracts`); dev tools go
@@ -65,13 +60,8 @@ apps/bot/src/engleks_bot/
   handlers/        aiogram routers
   rendering/       message splitting (4096 chars), keyboards
 packages/contracts/src/engleks_contracts/   wire DTOs, error codes, shared enums
-deploy/litellm/        the LiteLLM proxy image, its config and generate_key.py
-deploy/server/         production scripts (setup, render-env, deploy, backup) and systemd units
-deploy/infisical/      generate-secrets.sh: the secrets engleks generates itself, for Infisical's .env import
-deploy/prod.env        production config values (a PR changes them); copied into the server's .env
-deploy/secrets.txt     names of the production secrets; the values live in Infisical
-deploy/tests/          pytest tests of deploy/ scripts
-compose.prod.yaml      production override: GHCR images instead of builds
+litellm/   the local LiteLLM proxy: image, config, generate_key.py
+postgres/  init script: the proxy's role and database
 ```
 
 ## Dependency rules
@@ -106,8 +96,7 @@ Never add an import-linter exception to get green; change the design instead.
 | a shared object (engine, client, adapter) | built in `create_app()`, stored on `app.state`, read by a `Depends` provider in `transport/` |
 | a request or response body | `packages/contracts`, used by both the API and the bot |
 | an error the client must understand | `ErrorCode` in `packages/contracts`, mapped in `transport/errors.py` |
-| a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret; a production value goes in `deploy/prod.env` |
-| a production secret | a Compose secret, its name in `deploy/secrets.txt`, its value in Infisical before merging |
+| a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret |
 | a DB table | model on `Base` in `infra/db/` + `make revision m="..."` |
 | a repository | port in `domain/ports.py`, adapter in `infra/db/repositories.py` that takes the `async_sessionmaker` and opens one session and transaction per method (see `SqlInteractionRepository`); built in `create_app()` (or `cli.py`), never in `transport` |
 | a per-user counter or quota | port like `UsageLedger` (the adapter counts with an upsert and the DB clock; the use case decides), adapter in `infra/db/repositories.py` |
@@ -131,14 +120,14 @@ Never add an import-linter exception to get green; change the design instead.
 - LLM output is always parsed into a Pydantic model; raw LLM text never reaches the domain.
 - The user's text goes to the LLM only as the user message, wrapped verbatim in `<text>` tags;
   instructions to the model (including the retry's schema correction) are system messages.
-- The API calls LLMs only through the LiteLLM proxy, never a provider or Ollama directly,
-  and never depends on the `litellm` package.
+- The API calls LLMs only through an OpenAI-compatible endpoint (`API_LLM_BASE_URL`), never
+  a provider SDK; locally that is the LiteLLM proxy. The API never depends on the `litellm`
+  package.
 - Migrations run in the `migrate` Compose service, never on API startup. A test runs
   `alembic check`, so models and migrations must match. Never edit a migration that is on
   `main`; add a new one.
-- Every migration must work with the previous release's code: a rollback restores the old
-  images but never downgrades the schema. Add columns nullable or with a default; drop or
-  rename only in a later release.
+- Migrations are expand-only: every migration must work with the previous release's code.
+  Add columns nullable or with a default; drop or rename only in a later release.
 
 ## Logging
 
@@ -165,13 +154,6 @@ Never add an import-linter exception to get green; change the design instead.
   e.g. `register(async_sessionmaker(engine, expire_on_commit=False), rate_limit_per_minute=...)`.
   CLI tests use `typer.testing.CliRunner` with `build_cli(pg_settings)` via `asyncio.to_thread`.
 - Bot tests mock the API with `httpx2.MockTransport`, building responses from real `engleks_contracts` DTOs. Handler tests use real aiogram objects bound to a `Bot` on the `RecordingSession` fixture (`apps/bot/tests/conftest.py`), never `AsyncMock(spec=Message)`. Bot routing (filters, commands, callbacks, injection, the errors handler) is tested through `build_dispatcher(...).feed_update` on the `RecordingSession` bot.
-- Server script tests (`deploy/tests/`) run the bash scripts with the `server` fixture, whose
-  `git`, `docker`, `restic` and `curl` are one logging stub (`deploy/tests/conftest.py`);
-  assert on `server.calls()` and the fake `.env`. The tests need `jq` installed. The fixture
-  runs the real `engleks-render-env` against a fake Infisical: `set_secrets` sets what it
-  serves and `inputs()` shows what the stubs received. Scripts take `ENGLEKS_DIR`,
-  `BACKUP_DIR`, `ENGLEKS_LOCK_TIMEOUT` and `ENGLEKS_INFISICAL_CREDENTIALS` from the
-  environment for this. Every script is shellcheck-clean (`make lint`).
 - No test calls a real LLM or Telegram, except ones marked `@pytest.mark.llm`
   (run with `make test-llm`, never in CI).
 
@@ -179,8 +161,7 @@ Never add an import-linter exception to get green; change the design instead.
 
 - Ask before: adding a runtime dependency, a breaking change to an existing contract DTO or
   `/v1` endpoint (removing or renaming a field, changing its meaning), changing CI, Dockerfiles or `compose.yaml`, changing ruff, pyright or import-linter
-  config. `compose.prod.yaml`, `deploy/server/*` and `.github/workflows/deploy.yml` count as
-  CI, Dockerfiles and Compose here.
+  config.
 - Never: commit `.env` or secrets, skip or disable tests to get green, weaken lint or
   type settings, ignore a Trivy finding that has a fix.
 
