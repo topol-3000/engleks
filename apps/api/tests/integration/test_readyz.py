@@ -23,8 +23,7 @@ async def test_readyz_ok(pg_settings, client_for):
 
 async def test_readyz_db_unreachable(client_for):
     settings = Settings(
-        db_password=SecretStr("x"),
-        db_port=free_port(),
+        db_connection_string=SecretStr(f"postgresql+asyncpg://u:x@localhost:{free_port()}/engleks"),
         service_token=SecretStr("t"),
         llm_api_key=SecretStr("unused"),
         _env_file=None,

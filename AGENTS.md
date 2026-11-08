@@ -99,7 +99,7 @@ Never add an import-linter exception to get green; change the design instead.
 | a shared object (engine, client, adapter) | built in `create_app()`, stored on `app.state`, read by a `Depends` provider in `transport/` |
 | a request or response body | `packages/contracts`, used by both the API and the bot |
 | an error the client must understand | `ErrorCode` in `packages/contracts`, mapped in `transport/errors.py` |
-| a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret |
+| a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret in `compose.yaml` and an `environment` entry on each service that needs it in `compose.prod.yaml` |
 | a DB table | model on `Base` in `infra/db/` + `make revision m="..."` |
 | a repository | port in `domain/ports.py`, adapter in `infra/db/repositories.py` that takes the `async_sessionmaker` and opens one session and transaction per method (see `SqlInteractionRepository`); built in `create_app()` (or `cli.py`), never in `transport` |
 | a per-user counter or quota | port like `UsageLedger` (the adapter counts with an upsert and the DB clock; the use case decides), adapter in `infra/db/repositories.py` |
@@ -119,7 +119,8 @@ Never add an import-linter exception to get green; change the design instead.
 - Bot messages are built with `aiogram.utils.formatting` and sent as `**text.as_kwargs()` (text + entities); never a parse mode, never escaping.
 - No DI framework. `Settings()` is built only in `create_app()`, `cli.py` and the bot's `main()`;
   everything else gets values or adapters passed in.
-- Secrets are `SecretStr`, read from `/run/secrets` in containers and from `.env` locally.
+- Secrets are `SecretStr`, read from `.env` locally, from `/run/secrets` in `compose.yaml` and
+  from environment variables in `compose.prod.yaml`.
 - LLM output is always parsed into a Pydantic model; raw LLM text never reaches the domain.
 - The user's text goes to the LLM only as the user message, wrapped verbatim in `<text>` tags;
   instructions to the model (including the retry's schema correction) are system messages.

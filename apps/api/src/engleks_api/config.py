@@ -1,9 +1,8 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy import URL
 
 _SECRETS_DIR = Path("/run/secrets")
 
@@ -13,15 +12,14 @@ class Settings(BaseSettings):
         env_prefix="API_",
         env_file=".env",
         extra="ignore",
+        # Validation errors would otherwise print the connection string, password included.
+        hide_input_in_errors=True,
         # Only point at /run/secrets when it exists, so local runs don't warn.
         secrets_dir=_SECRETS_DIR if _SECRETS_DIR.is_dir() else None,
     )
 
-    db_host: str = "localhost"
-    db_port: int = 5432
-    db_name: str = "engleks"
-    db_user: str = "engleks"
-    db_password: SecretStr
+    # postgresql+asyncpg://user:password@host:port/db, with the password percent-encoded.
+    db_connection_string: SecretStr
     # Shared with the bot. Never empty, or an empty X-Bot-Token would authenticate.
     service_token: SecretStr = Field(min_length=1)
     # The LiteLLM proxy's OpenAI-compatible endpoint and the API's virtual key.
@@ -37,12 +35,12 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"] = "json"
     log_level: str = "INFO"
 
+    @field_validator("db_connection_string")
+    @classmethod
+    def _requires_asyncpg(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().startswith("postgresql+asyncpg://"):
+            raise ValueError("must start with postgresql+asyncpg://")
+        return value
+
     def database_url(self) -> str:
-        return URL.create(
-            "postgresql+asyncpg",
-            username=self.db_user,
-            password=self.db_password.get_secret_value(),
-            host=self.db_host,
-            port=self.db_port,
-            database=self.db_name,
-        ).render_as_string(hide_password=False)
+        return self.db_connection_string.get_secret_value()

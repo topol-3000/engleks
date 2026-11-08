@@ -57,7 +57,7 @@ def client_for() -> ClientFactory:
 def app() -> FastAPI:
     return create_app(
         Settings(
-            db_password=SecretStr("unused"),
+            db_connection_string=SecretStr("postgresql+asyncpg://u:unused@localhost/engleks"),
             service_token=SecretStr(SERVICE_TOKEN),
             llm_api_key=SecretStr("unused"),
             _env_file=None,
@@ -85,11 +85,7 @@ def postgres_url(postgres: PostgresContainer) -> str:
 @pytest.fixture
 def pg_settings(postgres: PostgresContainer) -> Settings:
     return Settings(
-        db_host=postgres.get_container_host_ip(),
-        db_port=int(postgres.get_exposed_port(5432)),
-        db_user=postgres.username,
-        db_password=SecretStr(postgres.password),
-        db_name=postgres.dbname,
+        db_connection_string=SecretStr(postgres.get_connection_url()),
         service_token=SecretStr(SERVICE_TOKEN),
         llm_api_key=SecretStr("unused"),
         _env_file=None,
