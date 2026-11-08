@@ -132,7 +132,7 @@ Migrations run as a separate service, never on api startup, so replicas cannot r
 
 - Build context is the repo root (uv needs the workspace lockfile, and the bot needs `packages/contracts`).
 - Single stage on `python:3.14-slim-trixie`: uv is mounted only for the `uv sync` step that installs the app and its workspace dependencies into a virtualenv, so it does not stay in the image.
-- Runs as non-root uid 10001. The api image includes curl for debugging inside the container.
+- Runs as non-root uid 10001.
 
 ### Local development
 
