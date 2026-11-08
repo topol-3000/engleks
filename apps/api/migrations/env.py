@@ -14,7 +14,7 @@ from engleks_api.logging_setup import configure_logging
 config = context.config
 
 # Same log pipeline as the API (JSON in containers). Read from the environment
-# directly: full Settings would require the DB password even for offline runs.
+# directly: full Settings would require the DB connection string even for offline runs.
 configure_logging(
     "json" if os.environ.get("API_LOG_FORMAT") == "json" else "console",
     os.environ.get("API_LOG_LEVEL", "INFO"),
