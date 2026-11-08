@@ -25,6 +25,8 @@ services:
     image: engleks-api:prod
     pull_policy: never
     command: ["alembic", "upgrade", "head"]
+    # A one-off job: platforms such as Coolify add a restart policy otherwise and re-run it forever.
+    restart: "no"
     environment:
       # env.py builds the full Settings, so migrate needs the api's required values too.
       API_DB_CONNECTION_STRING: ${API_DB_CONNECTION_STRING:?set API_DB_CONNECTION_STRING}
