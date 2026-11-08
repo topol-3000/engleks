@@ -45,7 +45,10 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    engine = create_async_engine(database_url(), poolclass=pool.NullPool)
+    # Fail fast on an unreachable database instead of hanging the deploy.
+    engine = create_async_engine(
+        database_url(), poolclass=pool.NullPool, connect_args={"timeout": 10}
+    )
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await engine.dispose()
