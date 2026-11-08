@@ -3,11 +3,10 @@
 FROM python:3.14-slim-trixie@sha256:cd89c30eda26ee911a4611b18680086e0ea42e6f5f8cbe653d07fa7958c9cec8
 # Pinned upgrades for CVEs the base image predates; drop each once the base image ships it:
 # apt 3.0.4 (CVE-2026-109518), zlib1g deb13u1 (CVE-2026-76844, CVE-2026-85091).
-# curl is for debugging inside the container. pip is not needed at runtime, and its vendored
-# libraries (urllib3) carry CVEs.
+# pip is not needed at runtime, and its vendored libraries (urllib3) carry CVEs.
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
-        apt=3.0.4 libapt-pkg7.0=3.0.4 zlib1g=1:1.3.dfsg+really1.3.1-1+deb13u1 curl \
+        apt=3.0.4 libapt-pkg7.0=3.0.4 zlib1g=1:1.3.dfsg+really1.3.1-1+deb13u1 \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip uninstall --yes pip
 WORKDIR /app
