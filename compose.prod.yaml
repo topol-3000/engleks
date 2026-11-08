@@ -1,0 +1,99 @@
+# Production stack: only the api and the bot run here (migrate is a one-off job before api).
+# Postgres and the LiteLLM proxy run elsewhere, so this file stands alone: do not combine it
+# with compose.yaml. Run with `docker compose -f compose.prod.yaml up -d --build`, or set
+# COMPOSE_FILE=compose.prod.yaml in the server's .env.
+name: engleks-prod
+
+x-service: &service
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "5"
+
+x-api-env: &api-env
+  # Inside a container localhost is the container itself: use an address it can reach.
+  API_DB_HOST: ${API_DB_HOST:?set API_DB_HOST}
+  API_DB_PORT: ${API_DB_PORT:-5432}
+  API_DB_NAME: ${API_DB_NAME:-engleks}
+  API_DB_USER: ${API_DB_USER:-engleks}
+  API_LOG_FORMAT: json
+  API_LOG_LEVEL: ${API_LOG_LEVEL:-INFO}
+  API_LLM_BASE_URL: ${API_LLM_BASE_URL:?set API_LLM_BASE_URL}
+  API_LLM_MODEL: ${API_LLM_MODEL:-engleks-rewrite}
+  API_RATE_LIMIT_PER_MINUTE: ${API_RATE_LIMIT_PER_MINUTE:-10}
+  API_DAILY_TOKEN_BUDGET: ${API_DAILY_TOKEN_BUDGET:-200000}
+  API_BOT_USERNAME: ${API_BOT_USERNAME:-}
+
+# migrate builds the full Settings in env.py, so it gets the same secrets as api.
+x-api-secrets: &api-secrets
+  - source: db_password
+    target: api_db_password
+  - source: service_token
+    target: api_service_token
+  - source: api_llm_key
+    target: api_llm_api_key
+
+services:
+  migrate:
+    <<: *service
+    # Reuses the image built by the api service; building it twice in parallel collides.
+    image: engleks-api:prod
+    pull_policy: never
+    command: ["alembic", "upgrade", "head"]
+    environment: *api-env
+    secrets: *api-secrets
+
+  api:
+    <<: *service
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: engleks-api:prod
+    environment: *api-env
+    secrets: *api-secrets
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  bot:
+    <<: *service
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    image: engleks-bot:prod
+    environment:
+      BOT_API_BASE_URL: http://api:8000
+      BOT_LOG_FORMAT: json
+      BOT_LOG_LEVEL: ${BOT_LOG_LEVEL:-INFO}
+    secrets:
+      - source: service_token
+        target: bot_service_token
+      - source: telegram_token
+        target: bot_telegram_token
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+secrets:
+  db_password:
+    environment: API_DB_PASSWORD
+  service_token:
+    environment: BOT_SERVICE_TOKEN
+  telegram_token:
+    environment: BOT_TELEGRAM_TOKEN
+  api_llm_key:
+    environment: API_LLM_API_KEY

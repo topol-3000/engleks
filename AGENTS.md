@@ -30,6 +30,7 @@ The MVP is built as sub-projects, each with its own spec: **Foundation** (done),
 | Apply migrations | `make migrate` |
 | New migration from models | `make revision m="add interaction"`, then review the file |
 | Full stack / stop it | `make up` / `make down` |
+| Production stack (needs an external Postgres and LiteLLM) | `docker compose -f compose.prod.yaml up -d --build` |
 | Trivy scan | `make scan` |
 | Create an invite (stack running) | `make invite [note=..] [uses=..] [days=..]` |
 | Any admin command (stack running) | `make admin a="user disable <id>"` |
@@ -62,6 +63,8 @@ apps/bot/src/engleks_bot/
 packages/contracts/src/engleks_contracts/   wire DTOs, error codes, shared enums
 litellm/   the local LiteLLM proxy: image, config, generate_key.py
 postgres/  init script: the proxy's role and database
+compose.yaml        local stack: postgres, litellm, migrate, api, bot, ollama (dev profile)
+compose.prod.yaml   production stack, standalone: migrate, api, bot
 ```
 
 ## Dependency rules
