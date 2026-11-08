@@ -17,7 +17,6 @@ dev = [
     "pyright",
     "pytest",
     "pytest-asyncio",
-    "pyyaml>=6.0.3",
     "ruff",
     "testcontainers[postgres]",
 ]
@@ -42,7 +41,7 @@ venvPath = "."
 venv = ".venv"
 
 [tool.pytest.ini_options]
-testpaths = ["packages/contracts/tests", "apps/api/tests", "apps/bot/tests", "deploy/tests"]
+testpaths = ["packages/contracts/tests", "apps/api/tests", "apps/bot/tests", "litellm/tests"]
 addopts = "--import-mode=importlib -m 'not llm'"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

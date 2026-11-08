@@ -36,10 +36,10 @@ scan: litellm-image
 	$(TRIVY) fs --no-progress --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --skip-dirs .venv .
 	$(TRIVY_DOCKER) image --no-progress --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 engleks-litellm:local
 litellm-image:
-	docker build -t engleks-litellm:local deploy/litellm
+	docker build -t engleks-litellm:local litellm
 # Prints the API's virtual key for .env (API_LLM_API_KEY). Needs the litellm service running.
 llm-key:
-	docker compose exec litellm python /deploy/generate_key.py
+	docker compose exec litellm python /litellm/generate_key.py
 # Run engleks-admin in the running api container.
 invite:
 	docker compose exec api engleks-admin invite create $(if $(note),--note "$(note)") $(if $(uses),--uses $(uses)) $(if $(days),--days $(days))

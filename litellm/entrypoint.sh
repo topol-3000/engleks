@@ -13,4 +13,4 @@ export UI_PASSWORD="$ui_password"
 export OPENAI_API_KEY="$openai_api_key"
 export ANTHROPIC_API_KEY="$anthropic_api_key"
 export DATABASE_URL="postgresql://litellm:${db_password}@postgres:5432/litellm"
-exec litellm --config /deploy/config.yaml --port 4000
+exec litellm --config /litellm/config.yaml --port 4000

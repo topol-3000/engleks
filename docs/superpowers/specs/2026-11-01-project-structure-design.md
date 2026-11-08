@@ -131,8 +131,8 @@ Migrations run as a separate service, never on api startup, so replicas cannot r
 ### Dockerfiles
 
 - Build context is the repo root (uv needs the workspace lockfile, and the bot needs `packages/contracts`).
-- Multi-stage: a builder stage with uv installs the app and its workspace dependencies into a virtualenv; the final stage is `python:3.14-slim-trixie` with only that virtualenv and the app.
-- Runs as a non-root user. No uv in the final image.
+- Single stage on `python:3.14-slim-trixie`: uv is mounted only for the `uv sync` step that installs the app and its workspace dependencies into a virtualenv, so it does not stay in the image.
+- Runs as non-root uid 10001. The api image includes curl for debugging inside the container.
 
 ### Local development
 
