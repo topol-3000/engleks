@@ -96,8 +96,8 @@ A push to `main` (normally a merged PR):
    skips the deployment. This includes `Railway apply` when the commit touches `.railway/`.
 2. Railway builds the image of each service whose watch patterns match the changed files.
    A commit that touches only docs or `.railway/` deploys nothing; a bot-only commit
-   redeploys only the bot. Both images are rebuilt by changes to `pyproject.toml`, `uv.lock`
-   or `packages/contracts/`.
+   redeploys only the bot. Both images are rebuilt by changes to `.dockerignore`, `pyproject.toml`,
+   `uv.lock` or `packages/contracts/`.
 3. api: `alembic upgrade head` runs in the new image against Postgres. If it fails, the deploy
    stops and the old api keeps serving.
 4. api: the new container must answer `GET /readyz` with 2xx (the database probe) within
