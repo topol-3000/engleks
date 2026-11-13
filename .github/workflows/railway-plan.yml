@@ -1,0 +1,33 @@
+name: Railway plan
+
+# Plans changes to the Railway environment (.railway/railway.ts) and comments the plan on the PR.
+# The apply on merge (railway-apply.yml) runs exactly this plan.
+
+on:
+  pull_request:
+    paths: [".railway/**"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: railway-plan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    # Fork PRs get no secrets; skip them instead of failing.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The action runs npm ci only at the repo root; railway.ts imports railway/iac from .railway/node_modules.
+      - run: npm ci --prefix .railway --ignore-scripts --no-audit --no-fund
+      - uses: railwayapp/config@9e17d413dbe219f19d62538d9c06b5dbb5e9abf8 # v1.2.0
+        with:
+          command: plan
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+          cli-version: "5.71.0"

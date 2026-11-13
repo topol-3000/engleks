@@ -1,0 +1,33 @@
+name: Railway apply
+
+# Applies the plan pinned on the merged PR (railway-plan.yml). A direct push without a PR has
+# no pinned plan and fails by design. If the environment changed since the plan, the apply
+# fails too; re-run the plan on a new PR.
+
+on:
+  push:
+    branches: [main]
+    paths: [".railway/**"]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: railway-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No npm ci: apply runs the pinned plan and does not evaluate railway.ts.
+      - uses: railwayapp/config@9e17d413dbe219f19d62538d9c06b5dbb5e9abf8 # v1.2.0
+        with:
+          command: apply
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+          cli-version: "5.71.0"
