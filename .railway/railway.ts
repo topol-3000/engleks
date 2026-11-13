@@ -6,8 +6,8 @@ import { defineRailway, github, postgres, preserve, project, service } from "rai
 
 const REGION = "europe-west4-drams3a";
 const source = github("topol-3000/engleks", { branch: "main", checkSuites: true });
-// Files both images are built from: a change here rebuilds both services.
-const shared = ["pyproject.toml", "uv.lock", "packages/contracts/**"];
+// Files that shape both images: a change here rebuilds both services.
+const shared = [".dockerignore", "pyproject.toml", "uv.lock", "packages/contracts/**"];
 
 export default defineRailway(() => {
   const db = postgres("postgres", { region: REGION });
