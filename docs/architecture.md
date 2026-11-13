@@ -130,4 +130,6 @@ The dashboard calls the same admin use cases as the `engleks-admin` CLI; it adds
 
 ## 9. Runtime
 
-Docker Compose with the services `api`, `bot` (long polling for the MVP), `postgres` and `litellm` (the LLM proxy, with its own database on the same Postgres server), plus `ollama` in dev. Configuration comes from env, with secrets kept separately. Token usage and cost are logged.
+Locally, Docker Compose with the services `api`, `bot` (long polling for the MVP), `postgres` and `litellm` (the LLM proxy, with its own database on the same Postgres server), plus `ollama` in dev. Configuration comes from env, with secrets kept separately. Token usage and cost are logged.
+
+Production runs on Railway: `api`, `bot` and a managed Postgres 18, connected over Railway's private network, with no public domain. Migrations run as the api's pre-deploy command (`alembic upgrade head`). The LiteLLM proxy runs outside Railway; the api reaches it through `API_LLM_BASE_URL`. See the runbook, [docs/deployment/railway.md](deployment/railway.md).
