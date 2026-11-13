@@ -13,11 +13,15 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/
 COPY apps/bot/pyproject.toml apps/bot/
-COPY packages/contracts packages/contracts
-COPY apps/bot/src apps/bot/src
+COPY packages/contracts/pyproject.toml packages/contracts/
+# Dependencies first, so a source-only change reuses this layer (Railway rejects cache mounts without a service id).
 # uv is mounted for this step only, so it does not stay in the image.
 RUN --mount=from=ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0,source=/uv,target=/bin/uv \
-    --mount=type=cache,target=/root/.cache/uv \
+    UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0 \
+    uv sync --frozen --no-dev --no-install-workspace --package engleks-bot
+COPY packages/contracts packages/contracts
+COPY apps/bot/src apps/bot/src
+RUN --mount=from=ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0,source=/uv,target=/bin/uv \
     UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0 \
     uv sync --frozen --no-dev --no-editable --package engleks-bot
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1

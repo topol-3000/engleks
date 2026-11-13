@@ -35,6 +35,8 @@ The MVP is built as sub-projects, each with its own spec: **Foundation** (done),
 | Create an invite (stack running) | `make invite [note=..] [uses=..] [days=..]` |
 | Any admin command (stack running) | `make admin a="user disable <id>"` |
 
+Production runs on Railway: see [docs/deployment/railway.md](docs/deployment/railway.md).
+
 Run `make lint && make test` before saying a task is done. Add dependencies with
 `uv add --package engleks-api <pkg>` (or `engleks-bot`, `engleks-contracts`); dev tools go
 in the root `dev` group with `uv add --dev <pkg>`. Never use pip.
@@ -65,6 +67,8 @@ litellm/   the local LiteLLM proxy: image, config, generate_key.py
 postgres/  init script: the proxy's role and database
 compose.yaml        local stack: postgres, litellm, migrate, api, bot, ollama (dev profile)
 compose.prod.yaml   production stack, standalone: migrate, api, bot
+.railway/          Railway IaC (railway.ts); plan/apply run in CI
+docs/deployment/  runbooks
 ```
 
 ## Dependency rules
@@ -99,7 +103,7 @@ Never add an import-linter exception to get green; change the design instead.
 | a shared object (engine, client, adapter) | built in `create_app()`, stored on `app.state`, read by a `Depends` provider in `transport/` |
 | a request or response body | `packages/contracts`, used by both the API and the bot |
 | an error the client must understand | `ErrorCode` in `packages/contracts`, mapped in `transport/errors.py` |
-| a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret in `compose.yaml` and an `environment` entry on each service that needs it in `compose.prod.yaml` |
+| a config value | the app's `config.py` + `.env.example`; a secret also gets a Compose secret in `compose.yaml` and an `environment` entry on each service that needs it in `compose.prod.yaml`; for production, an entry in `.railway/railway.ts` (a literal, or `preserve()` for a secret) |
 | a DB table | model on `Base` in `infra/db/` + `make revision m="..."` |
 | a repository | port in `domain/ports.py`, adapter in `infra/db/repositories.py` that takes the `async_sessionmaker` and opens one session and transaction per method (see `SqlInteractionRepository`); built in `create_app()` (or `cli.py`), never in `transport` |
 | a per-user counter or quota | port like `UsageLedger` (the adapter counts with an upsert and the DB clock; the use case decides), adapter in `infra/db/repositories.py` |
@@ -127,7 +131,7 @@ Never add an import-linter exception to get green; change the design instead.
 - The API calls LLMs only through an OpenAI-compatible endpoint (`API_LLM_BASE_URL`), never
   a provider SDK; locally that is the LiteLLM proxy. The API never depends on the `litellm`
   package.
-- Migrations run in the `migrate` Compose service, never on API startup. A test runs
+- Migrations run in the `migrate` Compose service, or Railway's pre-deploy command in production, never on API startup. A test runs
   `alembic check`, so models and migrations must match. Never edit a migration that is on
   `main`; add a new one.
 - Migrations are expand-only: every migration must work with the previous release's code.
@@ -164,7 +168,7 @@ Never add an import-linter exception to get green; change the design instead.
 ## Boundaries
 
 - Ask before: adding a runtime dependency, a breaking change to an existing contract DTO or
-  `/v1` endpoint (removing or renaming a field, changing its meaning), changing CI, Dockerfiles or `compose.yaml`, changing ruff, pyright or import-linter
+  `/v1` endpoint (removing or renaming a field, changing its meaning), changing CI, Dockerfiles, `compose.yaml` or `.railway/`, changing ruff, pyright or import-linter
   config.
 - Never: commit `.env` or secrets, skip or disable tests to get green, weaken lint or
   type settings, ignore a Trivy finding that has a fix.
